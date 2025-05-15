@@ -411,8 +411,8 @@ def main():
     setup_logging()
     
     # File paths
-    input_file = 'pre_enc/PRE_LSU2300105_NEW_06_QS.xlsm'
-    output_file = 'pre_enc/detail_output.csv'
+    input_file = 'input/PRE_LSU2300105_NEW_06_QS.xlsm'
+    output_file = 'output/detail_output.csv'
     
     # Process data using the separated functions
     try:
@@ -447,7 +447,7 @@ def main():
             print_dataframe(mdc_df, max_rows=20)
             
             # Export MDC data to separate CSV
-            mdc_output_file = 'pre_enc/summary_output.csv'
+            mdc_output_file = 'output/summary_output.csv'
             export_to_csv(mdc_df, mdc_output_file)
             logging.info(f"MDC sheet data exported to {mdc_output_file}")
         else:
