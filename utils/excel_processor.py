@@ -333,11 +333,13 @@ def parse_mdc_summary(df, cod_row_idx):
     output_columns = [
         'wbe_code', 
         'wbe_description', 
-        'quantity', 
         'wbe_direct_cost', 
         'wbe_list_price', 
         'wbe_offer_price', 
-        'wbe_sell_price'
+        'wbe_sell_price',
+        'commissions_cost',
+        'contribution_margin',
+        'contribution_margin_percent'
     ]
     
     # Prepare data storage
@@ -359,13 +361,6 @@ def parse_mdc_summary(df, cod_row_idx):
         if pd.notna(row[0]):
             wbe_code = str(row[0]).strip() if pd.notna(row[0]) else None
             wbe_description = str(row[1]).strip() if pd.notna(row[1]) else None
-            
-            # Extract and convert numeric values
-            try:
-                quantity = float(row[2]) if pd.notna(row[2]) else None
-            except (ValueError, TypeError):
-                quantity = None
-                logging.warning(f"Invalid quantity value at row {i+1}: {row[2]}")
             
             try:
                 wbe_direct_cost = float(row[3]) if pd.notna(row[3]) else None
@@ -390,16 +385,36 @@ def parse_mdc_summary(df, cod_row_idx):
             except (ValueError, TypeError):
                 wbe_sell_price = None
                 logging.warning(f"Invalid sell price value at row {i+1}: {row[6]}")
-            
+
+            try:
+                commissions_cost = float(row[8]) if pd.notna(row[8]) else None
+            except (ValueError, TypeError):
+                commissions_cost = None
+                logging.warning(f"Invalid commissions cost value at row {i+1}: {row[8]}")
+
+            try:
+                contribution_margin = float(row[15]) if pd.notna(row[15]) else None
+            except (ValueError, TypeError):
+                contribution_margin = None
+                logging.warning(f"Invalid contribution margin value at row {i+1}: {row[15]}")
+
+            try:
+                contribution_margin_percent = float(row[16]) if pd.notna(row[16]) else None
+            except (ValueError, TypeError):
+                contribution_margin_percent = None
+                logging.warning(f"Invalid contribution margin percent value at row {i+1}: {row[16]}")
+                
             # Add to data
             data.append({
                 'wbe_code': wbe_code,
                 'wbe_description': wbe_description,
-                'quantity': quantity,
                 'wbe_direct_cost': wbe_direct_cost,
                 'wbe_list_price': wbe_list_price,
                 'wbe_offer_price': wbe_offer_price,
-                'wbe_sell_price': wbe_sell_price
+                'wbe_sell_price': wbe_sell_price,
+                'commissions_cost': commissions_cost,
+                'contribution_margin': contribution_margin,
+                'contribution_margin_percent': contribution_margin_percent
             })
             
             logging.debug(f"Extracted WBE: {wbe_code} - {wbe_description}")

@@ -9,9 +9,10 @@ def create_visualizations(detail_df, summary_df, file_name):
     st.header(f"Data Visualizations - {file_name}")
     
     # Create tabs for different visualization categories
-    viz_tabs = st.tabs(["Detail Analysis", "Summary Analysis"])
+    viz_tabs = st.tabs(["Summary Analysis", "Detail Analysis"])
     
-    with viz_tabs[0]:
+    
+    with viz_tabs[1]:
         if not detail_df.empty:
             st.subheader(f"Detail Data - {file_name}")
             # Format detail table columns for display
@@ -24,6 +25,15 @@ def create_visualizations(detail_df, summary_df, file_name):
                     display_detail[col] = display_detail[col].astype('object')
                     display_detail[col] = display_detail[col].map(lambda x: QUANTITY_FORMAT.format(x) if pd.notna(x) else '')
             display_detail.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, col) for col in display_detail.columns]
+            
+            # Rearrange columns to put 'Proto WBE' as second column
+            #cols = display_detail.columns.tolist()
+            #proto_wbe_col = next((col for col in cols if col == 'Proto WBE'), None)
+            #if proto_wbe_col:
+            #    cols.remove(proto_wbe_col)
+            #    cols.insert(1, proto_wbe_col)
+            #    display_detail = display_detail[cols]
+            
             st.dataframe(display_detail, use_container_width=True)
             
             # Group data visualization
@@ -120,13 +130,13 @@ def create_visualizations(detail_df, summary_df, file_name):
         else:
             st.info("No detail data available for visualization.")
     
-    with viz_tabs[1]:
+    with viz_tabs[0]:
         if not summary_df.empty:
             st.subheader(f"Summary Data - {file_name}")
             # Format summary table columns for display
             display_summary = summary_df.copy(deep=True)
             for col in display_summary.columns:
-                if 'price' in col.lower() or 'cost' in col.lower() or 'eur' in col.lower():
+                if 'price' in col.lower() or 'cost' in col.lower() or 'eur' or 'margin' in col.lower():
                     display_summary[col] = display_summary[col].astype('object')
                     display_summary[col] = display_summary[col].map(lambda x: CURRENCY_FORMAT(x) if pd.notna(x) else '')
                 elif 'quantity' in col.lower() or 'qty' in col.lower():
@@ -136,48 +146,71 @@ def create_visualizations(detail_df, summary_df, file_name):
             display_summary_all = display_summary.copy()
             display_summary_all.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, col) for col in display_summary_all.columns]
             st.dataframe(display_summary_all, use_container_width=True)
-            # If you want to show only price columns as a separate table:
-            price_cols = [col for col in summary_df.columns if 'price' in col.lower()]
-            if price_cols:
-                price_display = display_summary[price_cols].copy()
-                price_display.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, col) for col in price_display.columns]
-                st.write("Price Data:")
-                st.dataframe(price_display, use_container_width=True)
             
-            # Quantity analysis
-            if 'quantity' in summary_df.columns:
-                # Scatter plot of quantity vs price if both exist
-                if 'wbe_list_price' in summary_df.columns:
-                    fig = px.scatter(
-                        summary_df,
-                        x='quantity',
-                        y='wbe_list_price',
-                        title=f'{SUMMARY_FIELD_DISPLAY_NAMES.get("quantity", "Quantity")} vs. {SUMMARY_FIELD_DISPLAY_NAMES.get("wbe_list_price", "List Price")}',
-                        color='wbe_code' if 'wbe_code' in summary_df.columns else None,
-                        size='wbe_list_price' if 'wbe_list_price' in summary_df.columns else None,
-                        hover_data=['wbe_description'] if 'wbe_description' in summary_df.columns else None
-                    )
-                    fig.update_layout(
-                        xaxis_title=SUMMARY_FIELD_DISPLAY_NAMES.get('quantity', 'Quantity'),
-                        yaxis_title=SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_list_price', 'List Price'),
-                        yaxis_tickformat=',.2f',
-                        xaxis_tickformat=',.0f'
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # Display quantity statistics
-                if summary_df['quantity'].dtype in ['float64', 'float32', 'int64']:
-                    stats = summary_df['quantity'].describe()
-                    stats_df = pd.DataFrame({
-                        'Statistic': stats.index,
-                        'Value': stats.values
-                    })
-                    stats_df['Value'] = stats_df['Value'].map(lambda x: QUANTITY_FORMAT.format(x) if isinstance(x, (int, float)) else x)
-                    st.write(f"{SUMMARY_FIELD_DISPLAY_NAMES.get('quantity', 'Quantity')} Statistics:")
-                    st.dataframe(stats_df, use_container_width=True)
-                
-                # Display formatted quantity data
-                st.write("Quantity Data:")
-                st.dataframe(display_summary[['quantity']], use_container_width=True)
+        if not summary_df.empty:
+            # Create a copy of the data for visualization
+            viz_data = summary_df.copy()
+            
+            # Create the bar chart with both metrics
+            fig = px.bar(
+                viz_data,
+                x='wbe_code',
+                y=['wbe_direct_cost', 'wbe_list_price'],
+                title=f'Distribution of Costs and List Prices by WBE Code',
+                barmode='group',
+                labels={
+                    'wbe_code': SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_code', 'WBE Code'),
+                    'wbe_description': SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_description', 'WBE Description'),
+                    'value': 'Amount (EUR)',
+                    'variable': 'Metric'
+                }
+            )
+            
+            # Update layout for better readability
+            fig.update_layout(
+                xaxis_title=SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_code', 'WBE Code'),
+                yaxis_title='Amount (EUR)',
+                yaxis_tickformat=',.2f',
+                showlegend=True,
+                legend_title='Metric'
+            )
+            
+            # Rename legend labels
+            fig.data[0].name = SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_direct_cost', 'Direct Cost')
+            fig.data[1].name = SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_list_price', 'List Price')
+            
+            # Display the chart
+            st.plotly_chart(fig, use_container_width=True)
+
+        if not summary_df.empty:
+            # Create a copy of the data for visualization
+            viz_data = summary_df.copy()
+            
+            # Extract first two letters of wbe_code and group by them
+            viz_data['wbe_prefix'] = viz_data['wbe_code'].str[:2]
+            grouped_data = viz_data.groupby('wbe_prefix')['wbe_direct_cost'].sum().reset_index()
+            
+            # Create pie chart
+            fig = px.pie(
+                grouped_data,
+                values='wbe_direct_cost',
+                names='wbe_prefix',
+                title='Distribution of Direct Costs by WBE Code Prefix',
+                labels={
+                    'wbe_prefix': 'WBE Code Prefix',
+                    'wbe_direct_cost': 'Direct Cost (EUR)'
+                }
+            )
+            
+            # Update layout for better readability
+            fig.update_traces(
+                textposition='inside',
+                textinfo='percent+label',
+                hovertemplate='<b>%{label}</b><br>Direct Cost: %{value:,.2f} EUR<br>Percentage: %{percent:.1%}'
+            )
+            
+            # Display the chart
+            st.plotly_chart(fig, use_container_width=True)
+
         else:
             st.info("No summary data available for visualization.") 

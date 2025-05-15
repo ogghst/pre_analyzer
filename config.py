@@ -20,11 +20,13 @@ def CURRENCY_FORMAT(x):
 SUMMARY_FIELD_DISPLAY_NAMES = {
     'wbe_code': 'Proto WBE',
     'wbe_description': 'Description',
-    'quantity': 'Quantity',
     'wbe_direct_cost': 'Direct Cost EUR',
     'wbe_list_price': 'Listino EUR',
     'wbe_offer_price': 'Offer Price EUR',
-    'wbe_sell_price': 'Sell Price EUR'
+    'wbe_sell_price': 'Sell Price EUR',
+    'commissions_cost': 'Commissions Cost EUR',
+    'contribution_margin': 'Contribution Margin EUR',
+    'contribution_margin_percent': 'Contribution Margin %'
 }
 
 # Detail field name to display name mapping
@@ -51,7 +53,9 @@ CURRENCY_FIELDS = [
     'wbe_sell_price',
     'wbe_item_total_price',
     'wbe_item_unit_price',
-    'wbe_item_list_price'
+    'wbe_item_list_price',
+    'commissions_cost',
+    'contribution_margin'
 ]
 
 # Numeric fields that should be formatted as quantities
@@ -59,9 +63,6 @@ QUANTITY_FIELDS = [
     'quantity',
     'wbe_item_quantity'
 ]
-
-# Default currency format
-CURRENCY_FORMAT = CURRENCY_FORMAT
 
 # Default quantity format
 QUANTITY_FORMAT = "{:.2f}" 
