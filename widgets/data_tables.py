@@ -1,23 +1,18 @@
 import streamlit as st
 import pandas as pd
-from config import SUMMARY_FIELD_DISPLAY_NAMES, DETAIL_FIELD_DISPLAY_NAMES, CURRENCY_FORMAT, QUANTITY_FORMAT
+from config import SUMMARY_FIELD_DISPLAY_NAMES, DETAIL_FIELD_DISPLAY_NAMES, format_value
 
 def show_data_tables(detail_df, summary_df, file_name):
     """Display the data tables with expanded options for a single file"""
-    tabs = st.tabs([f"Detail Data - {file_name}", f"Summary Data - {file_name}"])
+    tabs = st.tabs([f"Summary Data - {file_name}", f"Detail Data - {file_name}"])
     
-    with tabs[0]:
+    with tabs[1]:
         if not detail_df.empty:
             st.subheader(f"Detailed Data - {file_name}")
             display_df = detail_df.copy(deep=True)
             for col in display_df.columns:
-                if 'price' in col.lower() or 'cost' in col.lower() or 'eur' in col.lower():
-                    display_df[col] = display_df[col].astype('object')
-                    display_df[col] = display_df[col].map(lambda x: CURRENCY_FORMAT(x) if pd.notna(x) else '')
-                elif 'quantity' in col.lower() or 'qty' in col.lower():
-                    display_df[col] = display_df[col].astype('object')
-                    display_df[col] = display_df[col].map(lambda x: QUANTITY_FORMAT.format(x) if pd.notna(x) else '')
-            display_df.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, col) for col in display_df.columns]
+                display_df[col] = display_df[col].map(lambda x: format_value(col, x, 'detail'))
+            display_df.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, {'display_name': col})['display_name'] for col in display_df.columns]
             st.dataframe(display_df, use_container_width=True)
             st.download_button(
                 label="Download Detail Data as CSV",
@@ -28,18 +23,13 @@ def show_data_tables(detail_df, summary_df, file_name):
         else:
             st.info(f"No detail data available for {file_name}.")
     
-    with tabs[1]:
+    with tabs[0]:
         if not summary_df.empty:
             st.subheader(f"Summary Data - {file_name}")
             display_df = summary_df.copy(deep=True)
             for col in display_df.columns:
-                if 'price' in col.lower() or 'cost' in col.lower() or 'eur' in col.lower():
-                    display_df[col] = display_df[col].astype('object')
-                    display_df[col] = display_df[col].map(lambda x: CURRENCY_FORMAT(x) if pd.notna(x) else '')
-                elif 'quantity' in col.lower() or 'qty' in col.lower():
-                    display_df[col] = display_df[col].astype('object')
-                    display_df[col] = display_df[col].map(lambda x: QUANTITY_FORMAT.format(x) if pd.notna(x) else '')
-            display_df.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, col) for col in display_df.columns]
+                display_df[col] = display_df[col].map(lambda x: format_value(col, x, 'summary'))
+            display_df.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, {'display_name': col})['display_name'] for col in display_df.columns]
             st.dataframe(display_df, use_container_width=True)
             st.download_button(
                 label="Download Summary Data as CSV",
@@ -105,7 +95,7 @@ def show_comparison_tables(file1_data, file2_data):
                     # Reset index to ensure it's unique before styling
                     unique_items = unique_items.reset_index(drop=True)
                     # Rename columns using display names
-                    unique_items.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, col) for col in unique_items.columns]
+                    unique_items.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"] for col in unique_items.columns]
                     st.write(f"Found {len(unique_items)} items that appear in only one file:")
                     st.dataframe(
                         unique_items.style.apply(
@@ -133,8 +123,8 @@ def show_comparison_tables(file1_data, file2_data):
                 
                 if not diff_rows.empty:
                     # Rename columns using display names
-                    diff_rows.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col.split('_')[0], col) + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
-                                       if col != 'wbe_item_code' else DETAIL_FIELD_DISPLAY_NAMES.get(col, col)
+                    diff_rows.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col.split('_')[0], {"display_name": col})["display_name"] + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
+                                       if col != 'wbe_item_code' else DETAIL_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"]
                                        for col in diff_rows.columns]
                     st.write(f"Found {len(diff_rows)} items with differences between files:")
                     st.dataframe(diff_rows, use_container_width=True)
@@ -182,7 +172,7 @@ def show_comparison_tables(file1_data, file2_data):
                     # Reset index to ensure it's unique before styling
                     unique_items = unique_items.reset_index(drop=True)
                     # Rename columns using display names
-                    unique_items.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, col) for col in unique_items.columns]
+                    unique_items.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"] for col in unique_items.columns]
                     st.write(f"Found {len(unique_items)} summary items that appear in only one file:")
                     st.dataframe(
                         unique_items.style.apply(
@@ -210,8 +200,8 @@ def show_comparison_tables(file1_data, file2_data):
                 
                 if not diff_rows.empty:
                     # Rename columns using display names
-                    diff_rows.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col.split('_')[0], col) + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
-                                       if col != 'wbe_code' else SUMMARY_FIELD_DISPLAY_NAMES.get(col, col)
+                    diff_rows.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col.split('_')[0], {"display_name": col})["display_name"] + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
+                                       if col != 'wbe_code' else SUMMARY_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"]
                                        for col in diff_rows.columns]
                     st.write(f"Found {len(diff_rows)} summary items with differences between files:")
                     st.dataframe(diff_rows, use_container_width=True)

@@ -3,10 +3,10 @@ import logging
 import sys
 import os
 from utils.excel_processor import (
-    parse_pre_detail_from_excel,
-    process_pre_detail,
-    find_mdc_summary,
-    parse_mdc_summary
+    find_detail,
+    process_detail,
+    find_summary,
+    parse_summary
 )
 
 # Set up detailed logging
@@ -30,7 +30,7 @@ def debug_process_excel(file_path):
     # Process detail data
     try:
         logging.info("Loading raw Excel data...")
-        raw_df = parse_pre_detail_from_excel(file_path)
+        raw_df = find_detail(file_path)
         logging.info(f"Raw DataFrame shape: {raw_df.shape}")
         
         # Debug: Print first few rows of raw data
@@ -41,7 +41,7 @@ def debug_process_excel(file_path):
         
         # Process detail data
         logging.info("Processing detail data...")
-        detail_df = process_pre_detail(raw_df)
+        detail_df = process_detail(raw_df)
         
         logging.info(f"Processed detail data. Found {len(detail_df)} rows.")
         if len(detail_df) > 0:
@@ -79,10 +79,10 @@ def debug_process_excel(file_path):
         
         # Process summary data
         logging.info("Processing summary data...")
-        mdc_raw_df, cod_row_idx = find_mdc_summary(file_path)
+        mdc_raw_df, cod_row_idx = find_summary(file_path)
         
         if not mdc_raw_df.empty and cod_row_idx is not None:
-            summary_df = parse_mdc_summary(mdc_raw_df, cod_row_idx)
+            summary_df = parse_summary(mdc_raw_df, cod_row_idx)
             logging.info(f"Processed summary data. Found {len(summary_df)} rows.")
             if len(summary_df) > 0:
                 logging.debug("First few rows of processed summary data:")
