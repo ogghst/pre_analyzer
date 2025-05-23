@@ -74,13 +74,6 @@ def show_comparison_tables(file1_data, file2_data):
                 df1_subset = df1[common_cols].copy()
                 df2_subset = df2[common_cols].copy()
                 
-                # Format any float columns with thousands and decimal separators
-                for col in common_cols:
-                    if df1_subset[col].dtype in ['float64', 'float32']:
-                        df1_subset.loc[:, col] = df1_subset[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
-                    if df2_subset[col].dtype in ['float64', 'float32']:
-                        df2_subset.loc[:, col] = df2_subset[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
-                
                 # Add source indicator
                 df1_subset['source'] = file1_name
                 df2_subset['source'] = file2_name
@@ -94,11 +87,17 @@ def show_comparison_tables(file1_data, file2_data):
                     unique_items = pd.concat([df1_unique, df2_unique])
                     # Reset index to ensure it's unique before styling
                     unique_items = unique_items.reset_index(drop=True)
+                    # Create a display DataFrame for formatting
+                    display_unique = unique_items.copy()
+                    for col in display_unique.columns:
+                        display_type = DETAIL_FIELD_DISPLAY_NAMES.get(col, {}).get('type', None)
+                        if display_type == 'float':
+                            display_unique[col] = display_unique[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
                     # Rename columns using display names
-                    unique_items.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"] for col in unique_items.columns]
-                    st.write(f"Found {len(unique_items)} items that appear in only one file:")
+                    display_unique.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"] for col in display_unique.columns]
+                    st.write(f"Found {len(display_unique)} items that appear in only one file:")
                     st.dataframe(
-                        unique_items.style.apply(
+                        display_unique.style.apply(
                             lambda x: ['background-color: #DDEBF7' if v == file1_name else 'background-color: #E2EFDA' for v in x], 
                             subset=['source']
                         ),
@@ -119,15 +118,23 @@ def show_comparison_tables(file1_data, file2_data):
                 )
                 
                 # Find differences
-                diff_rows = merged[merged.filter(like='_1').values != merged.filter(like='_2').values]
+                diff_mask = (merged.filter(like='_1').values != merged.filter(like='_2').values)
+                diff_rows = merged[diff_mask.any(axis=1)]
                 
                 if not diff_rows.empty:
+                    # Create a display DataFrame for formatting
+                    display_diff = diff_rows.copy()
+                    for col in display_diff.columns:
+                        base_col = col.split('_')[0]
+                        display_type = DETAIL_FIELD_DISPLAY_NAMES.get(base_col, {}).get('type', None)
+                        if display_type == 'float':
+                            display_diff[col] = display_diff[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
                     # Rename columns using display names
-                    diff_rows.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col.split('_')[0], {"display_name": col})["display_name"] + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
+                    display_diff.columns = [DETAIL_FIELD_DISPLAY_NAMES.get(col.split('_')[0], {"display_name": col})["display_name"] + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
                                        if col != 'wbe_item_code' else DETAIL_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"]
-                                       for col in diff_rows.columns]
-                    st.write(f"Found {len(diff_rows)} items with differences between files:")
-                    st.dataframe(diff_rows, use_container_width=True)
+                                       for col in display_diff.columns]
+                    st.write(f"Found {len(display_diff)} items with differences between files:")
+                    st.dataframe(display_diff, use_container_width=True)
                 else:
                     st.success("All common items are identical between the two files.")
             else:
@@ -151,13 +158,6 @@ def show_comparison_tables(file1_data, file2_data):
                 df1_subset = df1[common_cols].copy()
                 df2_subset = df2[common_cols].copy()
                 
-                # Format any float columns with thousands and decimal separators
-                for col in common_cols:
-                    if df1_subset[col].dtype in ['float64', 'float32']:
-                        df1_subset.loc[:, col] = df1_subset[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
-                    if df2_subset[col].dtype in ['float64', 'float32']:
-                        df2_subset.loc[:, col] = df2_subset[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
-                
                 # Add source indicator
                 df1_subset['source'] = file1_name
                 df2_subset['source'] = file2_name
@@ -171,11 +171,17 @@ def show_comparison_tables(file1_data, file2_data):
                     unique_items = pd.concat([df1_unique, df2_unique])
                     # Reset index to ensure it's unique before styling
                     unique_items = unique_items.reset_index(drop=True)
+                    # Create a display DataFrame for formatting
+                    display_unique = unique_items.copy()
+                    for col in display_unique.columns:
+                        display_type = SUMMARY_FIELD_DISPLAY_NAMES.get(col, {}).get('type', None)
+                        if display_type == 'float':
+                            display_unique[col] = display_unique[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
                     # Rename columns using display names
-                    unique_items.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"] for col in unique_items.columns]
-                    st.write(f"Found {len(unique_items)} summary items that appear in only one file:")
+                    display_unique.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"] for col in display_unique.columns]
+                    st.write(f"Found {len(display_unique)} summary items that appear in only one file:")
                     st.dataframe(
-                        unique_items.style.apply(
+                        display_unique.style.apply(
                             lambda x: ['background-color: #DDEBF7' if v == file1_name else 'background-color: #E2EFDA' for v in x], 
                             subset=['source']
                         ),
@@ -196,15 +202,23 @@ def show_comparison_tables(file1_data, file2_data):
                 )
                 
                 # Find differences
-                diff_rows = merged[merged.filter(like='_1').values != merged.filter(like='_2').values]
+                diff_mask = (merged.filter(like='_1').values != merged.filter(like='_2').values)
+                diff_rows = merged[diff_mask.any(axis=1)]
                 
                 if not diff_rows.empty:
+                    # Create a display DataFrame for formatting
+                    display_diff = diff_rows.copy()
+                    for col in display_diff.columns:
+                        base_col = col.split('_')[0]
+                        display_type = SUMMARY_FIELD_DISPLAY_NAMES.get(base_col, {}).get('type', None)
+                        if display_type == 'float':
+                            display_diff[col] = display_diff[col].map(lambda x: '{:,.2f}'.format(x) if pd.notna(x) else x)
                     # Rename columns using display names
-                    diff_rows.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col.split('_')[0], {"display_name": col})["display_name"] + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
+                    display_diff.columns = [SUMMARY_FIELD_DISPLAY_NAMES.get(col.split('_')[0], {"display_name": col})["display_name"] + (' (File 1)' if col.endswith('_1') else ' (File 2)') 
                                        if col != 'wbe_code' else SUMMARY_FIELD_DISPLAY_NAMES.get(col, {"display_name": col})["display_name"]
-                                       for col in diff_rows.columns]
-                    st.write(f"Found {len(diff_rows)} summary items with differences between files:")
-                    st.dataframe(diff_rows, use_container_width=True)
+                                       for col in display_diff.columns]
+                    st.write(f"Found {len(display_diff)} summary items with differences between files:")
+                    st.dataframe(display_diff, use_container_width=True)
                 else:
                     st.success("All common summary items are identical between the two files.")
             else:

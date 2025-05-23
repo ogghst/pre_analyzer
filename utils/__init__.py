@@ -1,6 +1,5 @@
 # utils package for PRE Excel Data Analyzer
 from utils.excel_processor import (
-    setup_logging,
     find_pre_detail_from_excel,
     find_detail,
     process_detail,

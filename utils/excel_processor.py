@@ -6,11 +6,7 @@ import tempfile
 from config import PRE_FILE_TYPE, ANALISI_PROFITTABILITA_TYPE
 
 
-def setup_logging():
-    """Set up logging configuration."""
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
+
 
 
 def find_pre_detail_from_excel(file_path):
@@ -263,8 +259,10 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
             i += 1
             continue
 
+        # item
         if (
             pd.notna(row[code_col])
+            and pd.isna(row[proto_wbe_col])
             and pd.notna(row[desc_col])
             and pd.notna(row[quantity_col])
             and pd.notna(row[list_price_col])
@@ -340,7 +338,7 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
                 empty_rows_count += 1
 
         if empty_rows_count >= 10:
-            logging.debug("Multiple empty rows detected - likely end of section")
+            logging.debug("Multiple empty rows detected - likely end of document")
             # If we have collected data, we can return it now
             if data:
                 return create_wbe_dataframe(data)
