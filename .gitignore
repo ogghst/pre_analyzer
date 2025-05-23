@@ -1,3 +1,9 @@
 .venv
 input
 output
+dist
+.vscode
+build
+test_data
+.cursor
+__pycache__

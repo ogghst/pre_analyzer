@@ -9,6 +9,24 @@ def show_data_tables(detail_df, summary_df, file_name):
     with tabs[1]:
         if not detail_df.empty:
             st.subheader(f"Detailed Data - {file_name}")
+            # --- Summary widget for float columns ---
+            float_cols = [col for col in detail_df.columns if str(detail_df[col].dtype).startswith('float')]
+            if float_cols:
+                st.markdown("**Detail Data Summary (Float Columns):**")
+                summary_data = []
+                for col in float_cols:
+                    display_name = DETAIL_FIELD_DISPLAY_NAMES.get(col, {'display_name': col})['display_name']
+                    col_data = detail_df[col].dropna()
+                    summary_data.append({
+                        'Column': display_name,
+                        'Sum': '{:,.2f}'.format(col_data.sum()),
+                        'Mean': '{:,.2f}'.format(col_data.mean()),
+                        'Min': '{:,.2f}'.format(col_data.min()),
+                        'Max': '{:,.2f}'.format(col_data.max()),
+                        'Count': int(col_data.count())
+                    })
+                st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+            # --- End summary widget ---
             display_df = detail_df.copy(deep=True)
             for col in display_df.columns:
                 display_df[col] = display_df[col].map(lambda x: format_value(col, x, 'detail'))
@@ -26,6 +44,24 @@ def show_data_tables(detail_df, summary_df, file_name):
     with tabs[0]:
         if not summary_df.empty:
             st.subheader(f"Summary Data - {file_name}")
+            # --- Summary widget for float columns ---
+            float_cols = [col for col in summary_df.columns if str(summary_df[col].dtype).startswith('float')]
+            if float_cols:
+                st.markdown("**Summary Data Summary (Float Columns):**")
+                summary_data = []
+                for col in float_cols:
+                    display_name = SUMMARY_FIELD_DISPLAY_NAMES.get(col, {'display_name': col})['display_name']
+                    col_data = summary_df[col].dropna()
+                    summary_data.append({
+                        'Column': display_name,
+                        'Sum': '{:,.2f}'.format(col_data.sum()),
+                        'Mean': '{:,.2f}'.format(col_data.mean()),
+                        'Min': '{:,.2f}'.format(col_data.min()),
+                        'Max': '{:,.2f}'.format(col_data.max()),
+                        'Count': int(col_data.count())
+                    })
+                st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+            # --- End summary widget ---
             display_df = summary_df.copy(deep=True)
             for col in display_df.columns:
                 display_df[col] = display_df[col].map(lambda x: format_value(col, x, 'summary'))
