@@ -5,11 +5,14 @@ import sys
 import logging
 import uuid
 from datetime import datetime
+import sqlite3
+from pathlib import Path
 
 # Import utility functions
 from utils.excel_processor import (
     save_uploaded_file,
     process_data,
+    find_detail,
 )
 
 # Import widget functions
@@ -22,7 +25,7 @@ from widgets.summary_comparison_viz import create_summary_comparison_viz
 from widgets.single_file_viz import create_visualizations
 
 # Import display names
-from config import SUMMARY_FIELD_DISPLAY_NAMES, DETAIL_FIELD_DISPLAY_NAMES
+from config import SUMMARY_FIELD_DISPLAY_NAMES, DETAIL_FIELD_DISPLAY_NAMES, PRE_FILE_TYPE, ANALISI_PROFITTABILITA_TYPE
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,6 +44,100 @@ def setup_page():
     This application allows you to upload one or more Excel files and analyze the extracted data.
     You can view individual files or compare multiple files to identify differences.
     """)
+
+def create_analysis_db(db_path):
+    """Create the analysis database and tables if not already present."""
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    # Create main analysis table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS analysis (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT,
+            file_name TEXT,
+            file_type TEXT,
+            analysis_type TEXT
+        )
+    ''')
+    # Create summary_analysis table with correct types
+    summary_cols = []
+    for col, info in SUMMARY_FIELD_DISPLAY_NAMES.items():
+        if info.get('format') == 'currency' or info.get('format') == 'quantity':
+            summary_cols.append(f'"{col}" FLOAT')
+        else:
+            summary_cols.append(f'"{col}" TEXT')
+    summary_cols_str = ', '.join(summary_cols)
+    c.execute(f'''
+        CREATE TABLE IF NOT EXISTS summary_analysis (
+            analysis_id TEXT,
+            row_id TEXT,
+            row_index INTEGER,
+            {summary_cols_str},
+            FOREIGN KEY(analysis_id) REFERENCES analysis(id)
+        )
+    ''')
+    # Create detail_analysis table with correct types
+    detail_cols = []
+    for col, info in DETAIL_FIELD_DISPLAY_NAMES.items():
+        if info.get('format') == 'currency' or info.get('format') == 'quantity':
+            detail_cols.append(f'"{col}" FLOAT')
+        else:
+            detail_cols.append(f'"{col}" TEXT')
+    detail_cols_str = ', '.join(detail_cols)
+    c.execute(f'''
+        CREATE TABLE IF NOT EXISTS detail_analysis (
+            analysis_id TEXT,
+            row_id TEXT,
+            row_index INTEGER,
+            {detail_cols_str},
+            FOREIGN KEY(analysis_id) REFERENCES analysis(id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def store_analysis_in_db(file_data, analysis_type):
+    """Store analysis metadata and data in a SQLite database with normalized tables."""
+    db_dir = Path(__file__).parent.parent / '../db'
+    db_dir.mkdir(exist_ok=True)
+    db_path = db_dir / 'analysis_results.sqlite'
+    # Only create DB if it doesn't exist
+    if not db_path.exists():
+        create_analysis_db(db_path)
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    # Insert into analysis table
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    file_name = file_data['name']
+    # Use file_type from file_data, not by extension
+    file_type = file_data.get('file_type', None)
+    analysis_id = str(uuid.uuid4())
+    c.execute('''
+        INSERT INTO analysis (id, timestamp, file_name, file_type, analysis_type)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (analysis_id, timestamp, file_name, file_type, analysis_type))
+    # Insert summary data
+    summary_df = file_data['summary_df'].copy()
+    summary_fields = list(SUMMARY_FIELD_DISPLAY_NAMES.keys())
+    for idx, row in summary_df.iterrows():
+        row_id = str(uuid.uuid4())
+        values = [row.get(col, None) for col in summary_fields]
+        c.execute(f'''
+            INSERT INTO summary_analysis (analysis_id, row_id, row_index, {', '.join([f'"{col}"' for col in summary_fields])})
+            VALUES (?, ?, ?, {', '.join(['?' for _ in summary_fields])})
+        ''', (analysis_id, row_id, idx, *values))
+    # Insert detail data
+    detail_df = file_data['detail_df'].copy()
+    detail_fields = list(DETAIL_FIELD_DISPLAY_NAMES.keys())
+    for idx, row in detail_df.iterrows():
+        row_id = str(uuid.uuid4())
+        values = [row.get(col, None) for col in detail_fields]
+        c.execute(f'''
+            INSERT INTO detail_analysis (analysis_id, row_id, row_index, {', '.join([f'"{col}"' for col in detail_fields])})
+            VALUES (?, ?, ?, {', '.join(['?' for _ in detail_fields])})
+        ''', (analysis_id, row_id, idx, *values))
+    conn.commit()
+    conn.close()
 
 def main():
     """Main application function"""
@@ -75,6 +172,8 @@ def main():
                         if file_path:
                             # Process the file
                             detail_df, summary_df = process_data(file_path)
+                            # Get file_type from find_detail (used inside process_data)
+                            _, file_type = find_detail(file_path)
                             
                             # Store in session state
                             st.session_state.files[file_id] = {
@@ -82,7 +181,8 @@ def main():
                                 'path': file_path,
                                 'detail_df': detail_df,
                                 'summary_df': summary_df,
-                                'upload_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                'upload_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                'file_type': file_type
                             }
                             
                             # Clean up temporary file
@@ -145,6 +245,11 @@ def main():
             selected_file_id = file_ids[selected_idx]
             selected_file_data = st.session_state.files[selected_file_id]
             
+            # Add button to store analysis in DB
+            if st.button("Store Analysis in DB", key="store_single"):
+                store_analysis_in_db(selected_file_data, "Single File Analysis")
+                st.success("Analysis stored in database.")
+            
             # Display single file data
             if show_tables:
                 show_data_tables(
@@ -159,6 +264,8 @@ def main():
                     selected_file_data['summary_df'],
                     selected_file_data['name']
                 )
+            
+
         
         else:  # File Comparison mode
             if len(st.session_state.files) < 2:
@@ -207,6 +314,13 @@ def main():
                     
                     with viz_tabs[1]:
                         create_detail_comparison_viz(file1_data, file2_data)
+                
+                # Add button to store comparison analysis in DB
+                if st.button("Store Comparison in DB", key="store_comparison"):
+                    # Store both files' data and mark as comparison
+                    store_analysis_in_db(file1_data, "File Comparison (File 1)")
+                    store_analysis_in_db(file2_data, "File Comparison (File 2)")
+                    st.success("Comparison analysis stored in database.")
     else:
         # Show instructions when no files are uploaded
         st.info("Please upload Excel files using the sidebar to get started.")
