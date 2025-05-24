@@ -3,7 +3,12 @@ import logging
 import os
 import tempfile
 
-from config import PRE_FILE_TYPE, ANALISI_PROFITTABILITA_TYPE
+from config import (
+    PRE_FILE_TYPE, ANALISI_PROFITTABILITA_TYPE,
+    WBE_CODE, WBE_DESCRIPTION, WBE_DIRECT_COST, WBE_LIST_PRICE, WBE_OFFER_PRICE, WBE_SELL_PRICE, COMMISSIONS_COST, CONTRIBUTION_MARGIN, CONTRIBUTION_MARGIN_PERCENT,
+    WBE_ITEM_CODE, WBE_ITEM_DESCRIPTION, WBE_ITEM_QUANTITY, WBE_ITEM_TOTAL_PRICE, WBE_ITEM_UNIT_PRICE, WBE_ITEM_LIST_PRICE, WBE_GROUP_CODE, WBE_GROUP_DESC, WBE_TYPE_CODE, WBE_TYPE_TITLE, WBE_SUBTYPE_CODE, WBE_SUBTYPE_DESC,
+    DETAIL_FIELD_DISPLAY_NAMES, SUMMARY_FIELD_DISPLAY_NAMES
+)
 
 
 
@@ -70,20 +75,7 @@ def create_wbe_dataframe(data):
         pandas.DataFrame: DataFrame with standardized WBE item columns
     """
     result_df = pd.DataFrame(data)
-    columns = [
-        "wbe_item_code",
-        "wbe_item_description",
-        "wbe_item_quantity",
-        "wbe_item_total_price",
-        "wbe_item_unit_price",
-        "wbe_item_list_price",
-        "wbe_group_code",
-        "wbe_group_desc",
-        "wbe_type_code",
-        "wbe_type_title",
-        "wbe_subtype_code",
-        "wbe_subtype_desc",
-    ]
+    columns = list(DETAIL_FIELD_DISPLAY_NAMES.keys())
     # Make sure DataFrame has all the expected columns
     for col in columns:
         if col not in result_df.columns:
@@ -128,6 +120,8 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
     quantity_col = 4 if file_type == PRE_FILE_TYPE else 10
     list_price_col = 5 if file_type == PRE_FILE_TYPE else 12
     total_price_col = 6 if file_type == PRE_FILE_TYPE else 13
+    sub_list_total_price_col = 7 if file_type == PRE_FILE_TYPE else -1 #TODO handle in ANALISI_PROFITTABILITA
+    group_col = 10 if file_type == PRE_FILE_TYPE else -1 #TODO handle in ANALISI_PROFITTABILITA
 
     # row index
     i = 0
@@ -180,6 +174,7 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
             and pd.notna(row[quantity_col])
             and pd.isna(row[list_price_col])
             and pd.isna(row[total_price_col])
+            and not str(row[proto_wbe_col]).startswith('E')
         ):
             current_type = {"code": None, "title": None}
             current_subtype = {"code": None, "desc": None}
@@ -211,9 +206,12 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
             and pd.isna(row[quantity_col])
             and pd.isna(row[list_price_col])
             and pd.isna(row[total_price_col])
+            and not str(row[proto_wbe_col]).startswith('E')
         ):
             current_type["code"] = str(row[code_col]).strip()
             current_type["title"] = str(row[desc_col]).strip()
+            current_type["group"] = float(str(row[group_col]).strip()) if pd.notna(row[group_col]) else None
+            current_type["sub_list_total_price"] = float(str(row[sub_list_total_price_col]).strip()) if pd.notna(row[sub_list_total_price_col]) else None
             logging.debug(
                 f"         L2 -WBE Type: {current_type['code']} - {current_type['title']}"
             )
@@ -268,6 +266,7 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
             and pd.notna(row[list_price_col])
             and pd.notna(row[total_price_col])
         ):
+            logging.info(f"Processing item row {i} - proto_wbe_col: {row[desc_col]}")
             position = (
                 str(row[position_col]).strip() if pd.notna(row[position_col]) else ""
             )
@@ -311,24 +310,63 @@ def process_detail(df: pd.DataFrame, file_type: str) -> pd.DataFrame:
                 unit_price = total_price / quantity
             i += 1
 
-            item = {
-                "wbe_item_code": code,
-                "wbe_item_description": desc,
-                "wbe_item_quantity": quantity,
-                "wbe_item_total_price": total_price,
-                "wbe_item_unit_price": unit_price,
-                "wbe_item_list_price": list_price,
-                "wbe_group_code": current_group["code"],
-                "wbe_group_desc": current_group["desc"],
-                "wbe_type_code": current_type["code"],
-                "wbe_type_title": current_type["title"],
-                "wbe_subtype_code": current_subtype["code"],
-                "wbe_subtype_desc": current_subtype["desc"],
-            }
-
-            data.append(item)
+            data.append({
+                WBE_ITEM_CODE: code,
+                WBE_ITEM_DESCRIPTION: desc,
+                WBE_ITEM_QUANTITY: quantity,
+                WBE_ITEM_TOTAL_PRICE: total_price,
+                WBE_ITEM_UNIT_PRICE: unit_price,
+                WBE_ITEM_LIST_PRICE: list_price,
+                WBE_GROUP_CODE: current_group["code"],
+                WBE_GROUP_DESC: current_group["desc"],
+                WBE_TYPE_CODE: current_type["code"],
+                WBE_TYPE_TITLE: current_type["title"],
+                WBE_SUBTYPE_CODE: current_subtype["code"],
+                WBE_SUBTYPE_DESC: current_subtype["desc"],
+            })
             logging.debug(f"                    Extracted item {code} - {desc}")
 
+            continue
+
+        #special case for installation: data present in column 'proto_wbe_col' with value starting with 'E', desc present in column 'desc_col' and value present in sub_total_price_col
+        elif (
+            pd.notna(row[proto_wbe_col])
+            and str(row[proto_wbe_col]).strip().startswith("E")
+            and pd.notna(row[desc_col])
+            and pd.notna(row[sub_list_total_price_col])
+        ):
+            code = str(row[code_col]).strip() if pd.notna(row[code_col]) else ""
+            desc = str(row[desc_col]).strip() if pd.notna(row[desc_col]) else ""
+
+            quantity = float(str(row[group_col]).strip()) if pd.notna(row[group_col]) else None
+            current_type["sub_list_total_price"] = float(str(row[sub_list_total_price_col]).strip()) if pd.notna(row[sub_list_total_price_col]) else None
+
+            try:
+                list_price = (
+                    float(row[sub_list_total_price_col]) if pd.notna(row[sub_list_total_price_col]) else 0.0
+                )
+            except (ValueError, TypeError):
+                list_price = 0.0
+                logging.warning(
+                    f"Invalid list price at row {i+1}: {row[sub_list_total_price_col]}"
+                )
+
+            data.append({
+                WBE_ITEM_CODE: code,
+                WBE_ITEM_DESCRIPTION: desc,
+                WBE_ITEM_QUANTITY: quantity,
+                WBE_ITEM_TOTAL_PRICE: list_price,
+                WBE_ITEM_UNIT_PRICE: list_price,
+                WBE_ITEM_LIST_PRICE: list_price,
+                WBE_GROUP_CODE: current_group["code"],
+                WBE_GROUP_DESC: current_group["desc"],
+                WBE_TYPE_CODE: current_type["code"],
+                WBE_TYPE_TITLE: current_type["title"],
+                WBE_SUBTYPE_CODE: current_subtype["code"],
+                WBE_SUBTYPE_DESC: current_subtype["desc"],
+            })
+            logging.debug(f"                    Extracted item {code} - {desc}")
+            i += 1
             continue
 
         # If we see multiple consecutive empty rows, we might be at the end of a section
@@ -495,17 +533,7 @@ def process_summary(df, cod_row_idx, file_type) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Define column names for our output DataFrame
-    output_columns = [
-        "wbe_code",
-        "wbe_description",
-        "wbe_direct_cost",
-        "wbe_list_price",
-        "wbe_offer_price",
-        "wbe_sell_price",
-        "commissions_cost",
-        "contribution_margin",
-        "contribution_margin_percent",
-    ]
+    output_columns = list(SUMMARY_FIELD_DISPLAY_NAMES.keys())
 
     # Prepare data storage
     data = []
@@ -616,13 +644,13 @@ def process_summary(df, cod_row_idx, file_type) -> pd.DataFrame:
                 # Add to data
                 data.append(
                     {
-                        "wbe_code": wbe_code,
-                        "wbe_description": wbe_description,
-                        "wbe_direct_cost": wbe_direct_cost,
-                        "wbe_list_price": wbe_list_price,
-                        "wbe_offer_price": wbe_offer_price,
-                        "wbe_sell_price": wbe_sell_price,
-                        "contribution_margin_percent": contribution_margin_percent,
+                        WBE_CODE: wbe_code,
+                        WBE_DESCRIPTION: wbe_description,
+                        WBE_DIRECT_COST: wbe_direct_cost,
+                        WBE_LIST_PRICE: wbe_list_price,
+                        WBE_OFFER_PRICE: wbe_offer_price,
+                        WBE_SELL_PRICE: wbe_sell_price,
+                        CONTRIBUTION_MARGIN_PERCENT: contribution_margin_percent,
                     }
                 )
 
@@ -708,15 +736,15 @@ def process_summary(df, cod_row_idx, file_type) -> pd.DataFrame:
                 # Add to data
                 data.append(
                     {
-                        "wbe_code": wbe_code,
-                        "wbe_description": wbe_description,
-                        "wbe_direct_cost": wbe_direct_cost,
-                        "wbe_list_price": wbe_list_price,
-                        "wbe_offer_price": wbe_offer_price,
-                        "wbe_sell_price": wbe_sell_price,
-                        "commissions_cost": commissions_cost,
-                        "contribution_margin": contribution_margin,
-                        "contribution_margin_percent": contribution_margin_percent,
+                        WBE_CODE: wbe_code,
+                        WBE_DESCRIPTION: wbe_description,
+                        WBE_DIRECT_COST: wbe_direct_cost,
+                        WBE_LIST_PRICE: wbe_list_price,
+                        WBE_OFFER_PRICE: wbe_offer_price,
+                        WBE_SELL_PRICE: wbe_sell_price,
+                        COMMISSIONS_COST: commissions_cost,
+                        CONTRIBUTION_MARGIN: contribution_margin,
+                        CONTRIBUTION_MARGIN_PERCENT: contribution_margin_percent,
                     }
                 )
 

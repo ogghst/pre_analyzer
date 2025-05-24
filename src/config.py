@@ -20,33 +20,57 @@ def CURRENCY_FORMAT(x):
     except Exception:
         return str(x)
 
+# Field name constants
+WBE_CODE = 'wbe_code'
+WBE_DESCRIPTION = 'wbe_description'
+WBE_DIRECT_COST = 'wbe_direct_cost'
+WBE_LIST_PRICE = 'wbe_list_price'
+WBE_OFFER_PRICE = 'wbe_offer_price'
+WBE_SELL_PRICE = 'wbe_sell_price'
+COMMISSIONS_COST = 'commissions_cost'
+CONTRIBUTION_MARGIN = 'contribution_margin'
+CONTRIBUTION_MARGIN_PERCENT = 'contribution_margin_percent'
+
+WBE_ITEM_CODE = 'wbe_item_code'
+WBE_ITEM_DESCRIPTION = 'wbe_item_description'
+WBE_ITEM_QUANTITY = 'wbe_item_quantity'
+WBE_ITEM_TOTAL_PRICE = 'wbe_item_total_price'
+WBE_ITEM_UNIT_PRICE = 'wbe_item_unit_price'
+WBE_ITEM_LIST_PRICE = 'wbe_item_list_price'
+WBE_GROUP_CODE = 'wbe_group_code'
+WBE_GROUP_DESC = 'wbe_group_desc'
+WBE_TYPE_CODE = 'wbe_type_code'
+WBE_TYPE_TITLE = 'wbe_type_title'
+WBE_SUBTYPE_CODE = 'wbe_subtype_code'
+WBE_SUBTYPE_DESC = 'wbe_subtype_desc'
+
 # Summary field name to display name and format mapping
 SUMMARY_FIELD_DISPLAY_NAMES = {
-    'wbe_code': {'display_name': 'Proto WBE', 'format': 'default'},
-    'wbe_description': {'display_name': 'Description', 'format': 'default'},
-    'wbe_direct_cost': {'display_name': 'Direct Cost EUR', 'format': 'currency'},
-    'wbe_list_price': {'display_name': 'Listino EUR', 'format': 'currency'},
-    'wbe_offer_price': {'display_name': 'Offer Price EUR', 'format': 'currency'},
-    'wbe_sell_price': {'display_name': 'Sell Price EUR', 'format': 'currency'},
-    'commissions_cost': {'display_name': 'Commissions Cost EUR', 'format': 'currency'},
-    'contribution_margin': {'display_name': 'Contribution Margin EUR', 'format': 'currency'},
-    'contribution_margin_percent': {'display_name': 'Contribution Margin %', 'format': 'default'}
+    WBE_CODE: {'display_name': 'Proto WBE', 'format': 'default'},
+    WBE_DESCRIPTION: {'display_name': 'Description', 'format': 'default'},
+    WBE_DIRECT_COST: {'display_name': 'Direct Cost EUR', 'format': 'currency'},
+    WBE_LIST_PRICE: {'display_name': 'Listino EUR', 'format': 'currency'},
+    WBE_OFFER_PRICE: {'display_name': 'Offer Price EUR', 'format': 'currency'},
+    WBE_SELL_PRICE: {'display_name': 'Sell Price EUR', 'format': 'currency'},
+    COMMISSIONS_COST: {'display_name': 'Commissions Cost EUR', 'format': 'currency'},
+    CONTRIBUTION_MARGIN: {'display_name': 'Contribution Margin EUR', 'format': 'currency'},
+    CONTRIBUTION_MARGIN_PERCENT: {'display_name': 'Contribution Margin %', 'format': 'default'}
 }
 
 # Detail field name to display name and format mapping
 DETAIL_FIELD_DISPLAY_NAMES = {
-    'wbe_item_code': {'display_name': 'Proto BOM', 'format': 'default'},
-    'wbe_item_description': {'display_name': 'Description', 'format': 'default'},
-    'wbe_item_quantity': {'display_name': 'Quantity', 'format': 'quantity'},
-    'wbe_item_total_price': {'display_name': 'Total Price EUR', 'format': 'currency'},
-    'wbe_item_unit_price': {'display_name': 'Unit Price EUR', 'format': 'currency'},
-    'wbe_item_list_price': {'display_name': 'Listino EUR', 'format': 'currency'},
-    'wbe_group_code': {'display_name': 'Group', 'format': 'default'},
-    'wbe_group_desc': {'display_name': 'Group Description', 'format': 'default'},
-    'wbe_type_code': {'display_name': 'Proto WBE', 'format': 'default'},
-    'wbe_type_title': {'display_name': 'Proto WBE Description', 'format': 'default'},
-    'wbe_subtype_code': {'display_name': 'SubType', 'format': 'default'},
-    'wbe_subtype_desc': {'display_name': 'SubType Desc', 'format': 'default'}
+    WBE_ITEM_CODE: {'display_name': 'Proto BOM', 'format': 'default'},
+    WBE_ITEM_DESCRIPTION: {'display_name': 'Description', 'format': 'default'},
+    WBE_ITEM_QUANTITY: {'display_name': 'Quantity', 'format': 'quantity'},
+    WBE_ITEM_TOTAL_PRICE: {'display_name': 'Total Price EUR', 'format': 'currency'},
+    WBE_ITEM_UNIT_PRICE: {'display_name': 'Unit Price EUR', 'format': 'currency'},
+    WBE_ITEM_LIST_PRICE: {'display_name': 'Listino EUR', 'format': 'currency'},
+    WBE_GROUP_CODE: {'display_name': 'Group', 'format': 'default'},
+    WBE_GROUP_DESC: {'display_name': 'Group Description', 'format': 'default'},
+    WBE_TYPE_CODE: {'display_name': 'Proto WBE', 'format': 'default'},
+    WBE_TYPE_TITLE: {'display_name': 'Proto WBE Description', 'format': 'default'},
+    WBE_SUBTYPE_CODE: {'display_name': 'SubType', 'format': 'default'},
+    WBE_SUBTYPE_DESC: {'display_name': 'SubType Desc', 'format': 'default'}
 }
 
 # Default quantity format

@@ -25,7 +25,12 @@ from widgets.summary_comparison_viz import create_summary_comparison_viz
 from widgets.single_file_viz import create_visualizations
 
 # Import display names
-from config import SUMMARY_FIELD_DISPLAY_NAMES, DETAIL_FIELD_DISPLAY_NAMES, PRE_FILE_TYPE, ANALISI_PROFITTABILITA_TYPE
+from config import (
+    SUMMARY_FIELD_DISPLAY_NAMES, DETAIL_FIELD_DISPLAY_NAMES,
+    PRE_FILE_TYPE, ANALISI_PROFITTABILITA_TYPE,
+    WBE_CODE, WBE_DESCRIPTION, WBE_DIRECT_COST, WBE_LIST_PRICE, WBE_OFFER_PRICE, WBE_SELL_PRICE, COMMISSIONS_COST, CONTRIBUTION_MARGIN, CONTRIBUTION_MARGIN_PERCENT,
+    WBE_ITEM_CODE, WBE_ITEM_DESCRIPTION, WBE_ITEM_QUANTITY, WBE_ITEM_TOTAL_PRICE, WBE_ITEM_UNIT_PRICE, WBE_ITEM_LIST_PRICE, WBE_GROUP_CODE, WBE_GROUP_DESC, WBE_TYPE_CODE, WBE_TYPE_TITLE, WBE_SUBTYPE_CODE, WBE_SUBTYPE_DESC
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -214,9 +219,8 @@ def main():
         for file_id, file_data in st.session_state.files.items():
             file_table.append({
                 "ID": file_id,
-                "Filename": file_data['name'],
-                f"{DETAIL_FIELD_DISPLAY_NAMES.get('wbe_item_code', 'Detail Items')}": len(file_data['detail_df']),
-                f"{SUMMARY_FIELD_DISPLAY_NAMES.get('wbe_code', 'Summary Items')}": len(file_data['summary_df']),
+                f"{DETAIL_FIELD_DISPLAY_NAMES.get(WBE_ITEM_CODE, 'Detail Items')}": len(file_data['detail_df']),
+                f"{SUMMARY_FIELD_DISPLAY_NAMES.get(WBE_CODE, 'Summary Items')}": len(file_data['summary_df']),
                 "Upload Time": file_data['upload_time']
             })
         
