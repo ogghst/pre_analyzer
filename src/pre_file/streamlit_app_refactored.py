@@ -57,6 +57,33 @@ class ExcelAnalyzerApp:
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
     
+    def render_comparator_section(self):
+        """Render PRE comparator access section in sidebar"""
+        if self.current_file_type == FileType.PRE_FILE and self.current_data is not None:
+            st.sidebar.markdown("---")
+            st.sidebar.header("🔄 PRE Comparison")
+            st.sidebar.markdown("""
+            **Want to compare this PRE file with another?**
+            
+            Use the dedicated PRE File Comparator to analyze differences between two quotation files.
+            """)
+            
+            if st.sidebar.button("🚀 Launch PRE Comparator", type="primary", use_container_width=True):
+                st.sidebar.markdown("""
+                **To use the comparator:**
+                1. Open a new browser tab
+                2. Navigate to the PRE file directory: `src/pre_file`
+                3. Run: `streamlit run pre_comparator_app.py`
+                4. Upload both files for comparison
+                
+                Or run directly:
+                ```bash
+                cd src/pre_file
+                streamlit run pre_comparator_app.py
+                ```
+                """)
+                st.sidebar.info("💡 The comparator runs as a separate application for optimal performance.")
+    
     def render_analysis_view(self, analyzer, view_name: str):
         """
         Render the selected analysis view
@@ -182,6 +209,9 @@ class ExcelAnalyzerApp:
                     if selected_view != st.session_state.current_view:
                         st.session_state.current_view = selected_view
                         st.rerun()
+                    
+                    # PRE Comparator section
+                    self.render_comparator_section()
                     
                     # Export section
                     render_export_section(self.current_data, self.current_file_type)
