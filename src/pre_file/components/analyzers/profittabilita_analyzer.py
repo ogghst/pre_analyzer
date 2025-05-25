@@ -11,6 +11,9 @@ from plotly.subplots import make_subplots
 from typing import Dict, List, Any
 from .base_analyzer import BaseAnalyzer
 
+# Import field constants
+from ..field_constants import JsonFields, DisplayFields
+
 
 class ProfittabilitaAnalyzer(BaseAnalyzer):
     """Analyzer specifically for Analisi Profittabilita files"""
@@ -37,22 +40,22 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("Project ID", self.project.get('id', 'N/A'))
-            st.metric("Listino", self.project.get('listino', 'N/A'))
+            st.metric("Project ID", self.project.get(JsonFields.ID, 'N/A'))
+            st.metric("Listino", self.project.get(JsonFields.LISTINO, 'N/A'))
             
         with col2:
-            currency = self.project.get('parameters', {}).get('currency', 'EUR')
-            exchange_rate = self.project.get('parameters', {}).get('exchange_rate', 1.0)
+            currency = self.project.get(JsonFields.PARAMETERS, {}).get(JsonFields.CURRENCY, 'EUR')
+            exchange_rate = self.project.get(JsonFields.PARAMETERS, {}).get(JsonFields.EXCHANGE_RATE, 1.0)
             st.metric("Currency", currency)
             st.metric("Exchange Rate", f"{exchange_rate:.2f}")
             
         with col3:
             st.metric("Product Groups", len(self.product_groups))
-            total_items = sum(len(cat.get('items', [])) for group in self.product_groups for cat in group.get('categories', []))
+            total_items = sum(len(cat.get(JsonFields.ITEMS, [])) for group in self.product_groups for cat in group.get(JsonFields.CATEGORIES, []))
             st.metric("Total Items", total_items)
             
         with col4:
-            margin_perc = self.totals.get('margin_percentage', 0)
+            margin_perc = self.totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
             st.metric("Margin %", f"{margin_perc:.2f}%")
             # Count items with data
             items_with_data = self._count_items_with_data()
@@ -63,14 +66,14 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         fin_col1, fin_col2, fin_col3, fin_col4 = st.columns(4)
         
         with fin_col1:
-            st.metric("Total Listino", f"€{self.totals.get('total_listino', 0):,.2f}")
+            st.metric("Total Listino", f"€{self.totals.get(JsonFields.TOTAL_LISTINO, 0):,.2f}")
         with fin_col2:
-            st.metric("Total Costo", f"€{self.totals.get('total_costo', 0):,.2f}")
+            st.metric("Total Costo", f"€{self.totals.get(JsonFields.TOTAL_COSTO, 0):,.2f}")
         with fin_col3:
-            margin = self.totals.get('margin', 0)
+            margin = self.totals.get(JsonFields.MARGIN, 0)
             st.metric("Margin", f"€{margin:,.2f}")
         with fin_col4:
-            margin_perc = self.totals.get('margin_percentage', 0)
+            margin_perc = self.totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
             delta_color = "normal" if margin_perc > 20 else "inverse"
             st.metric("Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
     
@@ -84,10 +87,10 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         with col1:
             # Profitability pie chart
             profit_data = {
-                'Category': ['Total Costo', 'Margin'],
+                DisplayFields.CATEGORY_NAME: ['Total Costo', 'Margin'],
                 'Amount (€)': [
-                    self.totals.get('total_costo', 0),
-                    self.totals.get('margin', 0)
+                    self.totals.get(JsonFields.TOTAL_COSTO, 0),
+                    self.totals.get(JsonFields.MARGIN, 0)
                 ],
                 'Color': ['#ff6b6b', '#51cf66']
             }
@@ -97,9 +100,9 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             fig_pie = px.pie(
                 df_profit,
                 values='Amount (€)',
-                names='Category',
+                names=DisplayFields.CATEGORY_NAME,
                 title='Cost vs Margin Distribution',
-                color='Category',
+                color=DisplayFields.CATEGORY_NAME,
                 color_discrete_map={'Total Costo': '#ff6b6b', 'Margin': '#51cf66'}
             )
             fig_pie.update_layout(height=500)
@@ -107,7 +110,7 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         
         with col2:
             # Margin gauge chart
-            margin_perc = self.totals.get('margin_percentage', 0)
+            margin_perc = self.totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
             
             fig_gauge = go.Figure(go.Indicator(
                 mode="gauge+number+delta",
@@ -138,18 +141,18 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         
         group_profit_data = []
         for group in self.product_groups:
-            group_listino = sum(cat.get('subtotal_listino', 0) for cat in group.get('categories', []))
-            group_costo = sum(cat.get('subtotal_costo', 0) for cat in group.get('categories', []))
+            group_listino = sum(cat.get(JsonFields.PRICELIST_SUBTOTAL, 0) for cat in group.get(JsonFields.CATEGORIES, []))
+            group_costo = sum(cat.get(JsonFields.COST_SUBTOTAL, 0) for cat in group.get(JsonFields.CATEGORIES, []))
             group_margin = group_listino - group_costo
             group_margin_perc = (group_margin / group_listino * 100) if group_listino > 0 else 0
             
             group_profit_data.append({
-                'Group ID': group.get('group_id', 'Unknown'),
-                'Group Name': self._truncate_text(group.get('group_name', 'Unnamed'), 25),
-                'Listino (€)': group_listino,
-                'Costo (€)': group_costo,
-                'Margin (€)': group_margin,
-                'Margin %': group_margin_perc
+                DisplayFields.GROUP_ID: group.get(JsonFields.GROUP_ID, 'Unknown'),
+                DisplayFields.GROUP_NAME: self._truncate_text(group.get(JsonFields.GROUP_NAME, 'Unnamed'), 25),
+                DisplayFields.LISTINO_EUR: group_listino,
+                DisplayFields.COSTO_EUR: group_costo,
+                DisplayFields.MARGIN_EUR: group_margin,
+                DisplayFields.MARGIN_PERCENT: group_margin_perc
             })
         
         df_group_profit = pd.DataFrame(group_profit_data)
@@ -158,11 +161,11 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             # Stacked bar chart for profitability by group
             fig_stacked = px.bar(
                 df_group_profit,
-                x='Group ID',
-                y=['Costo (€)', 'Margin (€)'],
+                x=DisplayFields.GROUP_ID,
+                y=[DisplayFields.COSTO_EUR, DisplayFields.MARGIN_EUR],
                 title='Cost vs Margin by Group',
                 barmode='stack',
-                color_discrete_map={'Costo (€)': '#ff6b6b', 'Margin (€)': '#51cf66'}
+                color_discrete_map={DisplayFields.COSTO_EUR: '#ff6b6b', DisplayFields.MARGIN_EUR: '#51cf66'}
             )
             fig_stacked.update_layout(height=600)
             st.plotly_chart(fig_stacked, use_container_width=True)
@@ -177,21 +180,21 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         # Collect UTM data from all items
         utm_data = []
         for group in self.product_groups:
-            for category in group.get('categories', []):
-                for item in category.get('items', []):
+            for category in group.get(JsonFields.CATEGORIES, []):
+                for item in category.get(JsonFields.ITEMS, []):
                     # UTM fields
-                    utm_robot = self._safe_float(item.get('utm_robot', 0))
-                    utm_robot_h = self._safe_float(item.get('utm_robot_h', 0))
-                    utm_lgv = self._safe_float(item.get('utm_lgv', 0))
-                    utm_lgv_h = self._safe_float(item.get('utm_lgv_h', 0))
-                    utm_intra = self._safe_float(item.get('utm_intra', 0))
-                    utm_intra_h = self._safe_float(item.get('utm_intra_h', 0))
-                    utm_layout = self._safe_float(item.get('utm_layout', 0))
-                    utm_layout_h = self._safe_float(item.get('utm_layout_h', 0))
+                    utm_robot = self._safe_float(item.get(JsonFields.UTM_ROBOT, 0))
+                    utm_robot_h = self._safe_float(item.get(JsonFields.UTM_ROBOT_H, 0))
+                    utm_lgv = self._safe_float(item.get(JsonFields.UTM_LGV, 0))
+                    utm_lgv_h = self._safe_float(item.get(JsonFields.UTM_LGV_H, 0))
+                    utm_intra = self._safe_float(item.get(JsonFields.UTM_INTRA, 0))
+                    utm_intra_h = self._safe_float(item.get(JsonFields.UTM_INTRA_H, 0))
+                    utm_layout = self._safe_float(item.get(JsonFields.UTM_LAYOUT, 0))
+                    utm_layout_h = self._safe_float(item.get(JsonFields.UTM_LAYOUT_H, 0))
                     
                     # PM and other time fields
-                    pm_cost = self._safe_float(item.get('pm_cost', 0))
-                    pm_h = self._safe_float(item.get('pm_h', 0))
+                    pm_cost = self._safe_float(item.get(JsonFields.PM_COST, 0))
+                    pm_h = self._safe_float(item.get(JsonFields.PM_H, 0))
                     
                     # Only include items with UTM data
                     total_utm_value = utm_robot + utm_lgv + utm_intra + utm_layout
@@ -199,10 +202,10 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                     
                     if total_utm_value > 0 or total_utm_hours > 0:
                         utm_data.append({
-                            'Group ID': group.get('group_id', 'Unknown'),
-                            'Category ID': category.get('category_id', 'Unknown'),
-                            'Item Code': item.get('code', 'Unknown'),
-                            'Description': self._truncate_text(item.get('description', ''), 40),
+                            DisplayFields.GROUP_ID: group.get(JsonFields.GROUP_ID, 'Unknown'),
+                            DisplayFields.CATEGORY_ID: category.get(JsonFields.CATEGORY_ID, 'Unknown'),
+                            DisplayFields.ITEM_CODE: item.get(JsonFields.CODE, 'Unknown'),
+                            DisplayFields.ITEM_DESCRIPTION: self._truncate_text(item.get(JsonFields.DESCRIPTION, ''), 40),
                             'UTM Robot': utm_robot,
                             'UTM Robot Hours': utm_robot_h,
                             'UTM LGV': utm_lgv,
@@ -294,7 +297,8 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             significant_utm = df_utm[df_utm['Total UTM Value'] > 100].nlargest(20, 'Total UTM Value')
             
             if not significant_utm.empty:
-                display_cols = ['Group ID', 'Item Code', 'Description', 'Total UTM Value', 'Total Hours', 'UTM Robot', 'UTM LGV', 'PM Cost']
+                display_cols = [DisplayFields.GROUP_ID, DisplayFields.ITEM_CODE, DisplayFields.ITEM_DESCRIPTION, 
+                              'Total UTM Value', 'Total Hours', 'UTM Robot', 'UTM LGV', 'PM Cost']
                 st.dataframe(significant_utm[display_cols], use_container_width=True)
             else:
                 st.info("No significant UTM values found in the data.")
@@ -310,40 +314,40 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         wbe_categories = {}
         
         for group in self.product_groups:
-            for category in group.get('categories', []):
-                wbe = category.get('wbe', '').strip()
+            for category in group.get(JsonFields.CATEGORIES, []):
+                wbe = category.get(JsonFields.WBE, '').strip()
                 if wbe and wbe != '':
                     if wbe not in wbe_data:
                         wbe_data[wbe] = {
-                            'categories': [],
+                            JsonFields.CATEGORIES: [],
                             'total_listino': 0,
                             'total_costo': 0,
-                            'items': []
+                            JsonFields.ITEMS: []
                         }
                         wbe_categories[wbe] = []
                     
                     # Add category to WBE
                     wbe_categories[wbe].append({
-                        'group_id': group.get('group_id', 'Unknown'),
-                        'group_name': group.get('group_name', 'Unnamed'),
-                        'category_id': category.get('category_id', 'Unknown'),
-                        'category_name': category.get('category_name', 'Unnamed'),
+                        JsonFields.GROUP_ID: group.get(JsonFields.GROUP_ID, 'Unknown'),
+                        JsonFields.GROUP_NAME: group.get(JsonFields.GROUP_NAME, 'Unnamed'),
+                        JsonFields.CATEGORY_ID: category.get(JsonFields.CATEGORY_ID, 'Unknown'),
+                        JsonFields.CATEGORY_NAME: category.get(JsonFields.CATEGORY_NAME, 'Unnamed'),
                         'category': category
                     })
                     
                     # Aggregate financials
-                    cat_listino = self._safe_float(category.get('subtotal_listino', 0))
-                    cat_costo = self._safe_float(category.get('subtotal_costo', 0))
+                    cat_listino = self._safe_float(category.get(JsonFields.PRICELIST_SUBTOTAL, 0))
+                    cat_costo = self._safe_float(category.get(JsonFields.COST_SUBTOTAL, 0))
                     
                     wbe_data[wbe]['total_listino'] += cat_listino
                     wbe_data[wbe]['total_costo'] += cat_costo
                     
                     # Collect items for detailed analysis
-                    for item in category.get('items', []):
+                    for item in category.get(JsonFields.ITEMS, []):
                         item_data = item.copy()
-                        item_data['group_id'] = group.get('group_id', 'Unknown')
-                        item_data['category_id'] = category.get('category_id', 'Unknown')
-                        wbe_data[wbe]['items'].append(item_data)
+                        item_data[JsonFields.GROUP_ID] = group.get(JsonFields.GROUP_ID, 'Unknown')
+                        item_data[JsonFields.CATEGORY_ID] = category.get(JsonFields.CATEGORY_ID, 'Unknown')
+                        wbe_data[wbe][JsonFields.ITEMS].append(item_data)
         
         if not wbe_data:
             st.warning("No WBE data found in the current dataset.")
@@ -359,13 +363,13 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             margin_perc = (margin / data['total_listino'] * 100) if data['total_listino'] > 0 else 0
             
             wbe_summary.append({
-                'WBE': wbe,
-                'Categories': len(wbe_categories[wbe]),
-                'Items': len(data['items']),
-                'Listino (€)': data['total_listino'],
-                'Costo (€)': data['total_costo'],
-                'Margin (€)': margin,
-                'Margin %': margin_perc
+                DisplayFields.WBE: wbe,
+                DisplayFields.CATEGORIES: len(wbe_categories[wbe]),
+                DisplayFields.ITEMS: len(data[JsonFields.ITEMS]),
+                DisplayFields.LISTINO_EUR: data['total_listino'],
+                DisplayFields.COSTO_EUR: data['total_costo'],
+                DisplayFields.MARGIN_EUR: margin,
+                DisplayFields.MARGIN_PERCENT: margin_perc
             })
         
         df_wbe_summary = pd.DataFrame(wbe_summary)
@@ -432,54 +436,54 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             'Other': 0
         }
         
-        for item in wbe_data['items']:
+        for item in wbe_data[JsonFields.ITEMS]:
             # Material costs
-            cost_components['Material'] += self._safe_float(item.get('mat', 0))
+            cost_components['Material'] += self._safe_float(item.get(JsonFields.MAT, 0))
             
             # UTM costs
-            cost_components['UTM (Robot)'] += self._safe_float(item.get('utm_robot', 0))
-            cost_components['UTM (LGV)'] += self._safe_float(item.get('utm_lgv', 0))
-            cost_components['UTM (Intra)'] += self._safe_float(item.get('utm_intra', 0))
-            cost_components['UTM (Layout)'] += self._safe_float(item.get('utm_layout', 0))
+            cost_components['UTM (Robot)'] += self._safe_float(item.get(JsonFields.UTM_ROBOT, 0))
+            cost_components['UTM (LGV)'] += self._safe_float(item.get(JsonFields.UTM_LGV, 0))
+            cost_components['UTM (Intra)'] += self._safe_float(item.get(JsonFields.UTM_INTRA, 0))
+            cost_components['UTM (Layout)'] += self._safe_float(item.get(JsonFields.UTM_LAYOUT, 0))
             
             # Engineering costs
-            cost_components['Engineering (UTE)'] += self._safe_float(item.get('ute', 0))
-            cost_components['Engineering (BA)'] += self._safe_float(item.get('ba', 0))
+            cost_components['Engineering (UTE)'] += self._safe_float(item.get(JsonFields.UTE, 0))
+            cost_components['Engineering (BA)'] += self._safe_float(item.get(JsonFields.BA, 0))
             
             # Software costs
-            cost_components['Software (PC)'] += self._safe_float(item.get('sw_pc', 0))
-            cost_components['Software (PLC)'] += self._safe_float(item.get('sw_plc', 0))
-            cost_components['Software (LGV)'] += self._safe_float(item.get('sw_lgv', 0))
+            cost_components['Software (PC)'] += self._safe_float(item.get(JsonFields.SW_PC, 0))
+            cost_components['Software (PLC)'] += self._safe_float(item.get(JsonFields.SW_PLC, 0))
+            cost_components['Software (LGV)'] += self._safe_float(item.get(JsonFields.SW_LGV, 0))
             
             # Manufacturing costs
             cost_components['Manufacturing (Mec)'] += (
-                self._safe_float(item.get('mtg_mec', 0)) + 
-                self._safe_float(item.get('mtg_mec_intra', 0))
+                self._safe_float(item.get(JsonFields.MTG_MEC, 0)) + 
+                self._safe_float(item.get(JsonFields.MTG_MEC_INTRA, 0))
             )
             cost_components['Manufacturing (Ele)'] += (
-                self._safe_float(item.get('cab_ele', 0)) + 
-                self._safe_float(item.get('cab_ele_intra', 0))
+                self._safe_float(item.get(JsonFields.CAB_ELE, 0)) + 
+                self._safe_float(item.get(JsonFields.CAB_ELE_INTRA, 0))
             )
             
             # Testing costs
             cost_components['Testing (Collaudo)'] += (
-                self._safe_float(item.get('coll_ba', 0)) +
-                self._safe_float(item.get('coll_pc', 0)) +
-                self._safe_float(item.get('coll_plc', 0)) +
-                self._safe_float(item.get('coll_lgv', 0))
+                self._safe_float(item.get(JsonFields.COLL_BA, 0)) +
+                self._safe_float(item.get(JsonFields.COLL_PC, 0)) +
+                self._safe_float(item.get(JsonFields.COLL_PLC, 0)) +
+                self._safe_float(item.get(JsonFields.COLL_LGV, 0))
             )
             
             # Project management
-            cost_components['Project Management'] += self._safe_float(item.get('pm_cost', 0))
+            cost_components['Project Management'] += self._safe_float(item.get(JsonFields.PM_COST, 0))
             
             # Installation
-            cost_components['Installation'] += self._safe_float(item.get('install', 0))
+            cost_components['Installation'] += self._safe_float(item.get(JsonFields.INSTALL, 0))
             
             # Documentation
-            cost_components['Documentation'] += self._safe_float(item.get('document', 0))
+            cost_components['Documentation'] += self._safe_float(item.get(JsonFields.DOCUMENT, 0))
             
             # After sales
-            cost_components['After Sales'] += self._safe_float(item.get('after_sales', 0))
+            cost_components['After Sales'] += self._safe_float(item.get(JsonFields.AFTER_SALES, 0))
         
         # Filter out zero components and create dataframe
         cost_components_filtered = {k: v for k, v in cost_components.items() if v > 0}
@@ -529,16 +533,16 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         cat_data = []
         for cat_info in wbe_categories:
             category = cat_info['category']
-            cat_listino = self._safe_float(category.get('subtotal_listino', 0))
-            cat_costo = self._safe_float(category.get('subtotal_costo', 0))
+            cat_listino = self._safe_float(category.get(JsonFields.PRICELIST_SUBTOTAL, 0))
+            cat_costo = self._safe_float(category.get(JsonFields.COST_SUBTOTAL, 0))
             cat_margin = cat_listino - cat_costo
             cat_margin_perc = (cat_margin / cat_listino * 100) if cat_listino > 0 else 0
             
             cat_data.append({
-                'Group': cat_info['group_id'],
-                'Category': cat_info['category_id'],
-                'Name': self._truncate_text(cat_info['category_name'], 30),
-                'Items': len(category.get('items', [])),
+                'Group': cat_info[JsonFields.GROUP_ID],
+                'Category': cat_info[JsonFields.CATEGORY_ID],
+                'Name': self._truncate_text(cat_info[JsonFields.CATEGORY_NAME], 30),
+                'Items': len(category.get(JsonFields.ITEMS, [])),
                 'Listino (€)': cat_listino,
                 'Costo (€)': cat_costo,
                 'Margin (€)': cat_margin,
@@ -578,43 +582,43 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             'PM Hours': 0
         }
         
-        for item in wbe_data['items']:
-            total_hours['UTM Robot'] += self._safe_float(item.get('utm_robot_h', 0))
-            total_hours['UTM LGV'] += self._safe_float(item.get('utm_lgv_h', 0))
-            total_hours['UTM Intra'] += self._safe_float(item.get('utm_intra_h', 0))
-            total_hours['UTM Layout'] += self._safe_float(item.get('utm_layout_h', 0))
+        for item in wbe_data[JsonFields.ITEMS]:
+            total_hours['UTM Robot'] += self._safe_float(item.get(JsonFields.UTM_ROBOT_H, 0))
+            total_hours['UTM LGV'] += self._safe_float(item.get(JsonFields.UTM_LGV_H, 0))
+            total_hours['UTM Intra'] += self._safe_float(item.get(JsonFields.UTM_INTRA_H, 0))
+            total_hours['UTM Layout'] += self._safe_float(item.get(JsonFields.UTM_LAYOUT_H, 0))
             
             total_hours['Engineering'] += (
-                self._safe_float(item.get('ute_h', 0)) +
-                self._safe_float(item.get('ba_h', 0)) +
-                self._safe_float(item.get('sw_pc_h', 0)) +
-                self._safe_float(item.get('sw_plc_h', 0)) +
-                self._safe_float(item.get('sw_lgv_h', 0))
+                self._safe_float(item.get(JsonFields.UTE_H, 0)) +
+                self._safe_float(item.get(JsonFields.BA_H, 0)) +
+                self._safe_float(item.get(JsonFields.SW_PC_H, 0)) +
+                self._safe_float(item.get(JsonFields.SW_PLC_H, 0)) +
+                self._safe_float(item.get(JsonFields.SW_LGV_H, 0))
             )
             
             total_hours['Manufacturing'] += (
-                self._safe_float(item.get('mtg_mec_h', 0)) +
-                self._safe_float(item.get('mtg_mec_intra_h', 0)) +
-                self._safe_float(item.get('cab_ele_h', 0)) +
-                self._safe_float(item.get('cab_ele_intra_h', 0))
+                self._safe_float(item.get(JsonFields.MTG_MEC_H, 0)) +
+                self._safe_float(item.get(JsonFields.MTG_MEC_INTRA_H, 0)) +
+                self._safe_float(item.get(JsonFields.CAB_ELE_H, 0)) +
+                self._safe_float(item.get(JsonFields.CAB_ELE_INTRA_H, 0))
             )
             
             total_hours['Testing'] += (
-                self._safe_float(item.get('coll_ba_h', 0)) +
-                self._safe_float(item.get('coll_pc_h', 0)) +
-                self._safe_float(item.get('coll_plc_h', 0)) +
-                self._safe_float(item.get('coll_lgv_h', 0))
+                self._safe_float(item.get(JsonFields.COLL_BA_H, 0)) +
+                self._safe_float(item.get(JsonFields.COLL_PC_H, 0)) +
+                self._safe_float(item.get(JsonFields.COLL_PLC_H, 0)) +
+                self._safe_float(item.get(JsonFields.COLL_LGV_H, 0))
             )
             
             total_hours['Installation'] += (
-                self._safe_float(item.get('install_h', 0)) +
-                self._safe_float(item.get('site_h', 0)) +
-                self._safe_float(item.get('av_pc_h', 0)) +
-                self._safe_float(item.get('av_plc_h', 0)) +
-                self._safe_float(item.get('av_lgv_h', 0))
+                self._safe_float(item.get(JsonFields.INSTALL_H, 0)) +
+                self._safe_float(item.get(JsonFields.SITE_H, 0)) +
+                self._safe_float(item.get(JsonFields.AV_PC_H, 0)) +
+                self._safe_float(item.get(JsonFields.AV_PLC_H, 0)) +
+                self._safe_float(item.get(JsonFields.AV_LGV_H, 0))
             )
             
-            total_hours['PM Hours'] += self._safe_float(item.get('pm_h', 0))
+            total_hours['PM Hours'] += self._safe_float(item.get(JsonFields.PM_H, 0))
         
         # Filter out zero hours
         hours_filtered = {k: v for k, v in total_hours.items() if v > 0}
@@ -661,16 +665,24 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         
         # Define field categories
         field_categories = {
-            'Basic': ['quantity', 'unit_cost', 'total_cost', 'listino_total', 'mat'],
-            'UTM': ['utm_robot', 'utm_robot_h', 'utm_lgv', 'utm_lgv_h', 'utm_intra', 'utm_intra_h', 'utm_layout', 'utm_layout_h'],
-            'Engineering': ['ute', 'ute_h', 'ba', 'ba_h', 'sw_pc', 'sw_pc_h', 'sw_plc', 'sw_plc_h', 'sw_lgv', 'sw_lgv_h'],
-            'Manufacturing': ['mtg_mec', 'mtg_mec_h', 'mtg_mec_intra', 'mtg_mec_intra_h', 'cab_ele', 'cab_ele_h', 'cab_ele_intra', 'cab_ele_intra_h'],
-            'Testing': ['coll_ba', 'coll_ba_h', 'coll_pc', 'coll_pc_h', 'coll_plc', 'coll_plc_h', 'coll_lgv', 'coll_lgv_h'],
-            'Project Management': ['pm_cost', 'pm_h', 'spese_pm'],
-            'Documentation': ['document', 'document_h'],
-            'Logistics': ['imballo', 'stoccaggio', 'trasporto'],
-            'Field Activities': ['site', 'site_h', 'install', 'install_h', 'av_pc', 'av_pc_h', 'av_plc', 'av_plc_h', 'av_lgv', 'av_lgv_h'],
-            'Additional': ['spese_field', 'spese_varie', 'after_sales', 'provvigioni_italia', 'provvigioni_estero', 'tesoretto', 'montaggio_bema_mbe_us']
+            'Basic': [JsonFields.QTY, JsonFields.UNIT_COST, JsonFields.TOTAL_COST, JsonFields.PRICELIST_TOTAL, JsonFields.MAT],
+            'UTM': [JsonFields.UTM_ROBOT, JsonFields.UTM_ROBOT_H, JsonFields.UTM_LGV, JsonFields.UTM_LGV_H, 
+                   JsonFields.UTM_INTRA, JsonFields.UTM_INTRA_H, JsonFields.UTM_LAYOUT, JsonFields.UTM_LAYOUT_H],
+            'Engineering': [JsonFields.UTE, JsonFields.UTE_H, JsonFields.BA, JsonFields.BA_H, JsonFields.SW_PC, 
+                          JsonFields.SW_PC_H, JsonFields.SW_PLC, JsonFields.SW_PLC_H, JsonFields.SW_LGV, JsonFields.SW_LGV_H],
+            'Manufacturing': [JsonFields.MTG_MEC, JsonFields.MTG_MEC_H, JsonFields.MTG_MEC_INTRA, JsonFields.MTG_MEC_INTRA_H, 
+                            JsonFields.CAB_ELE, JsonFields.CAB_ELE_H, JsonFields.CAB_ELE_INTRA, JsonFields.CAB_ELE_INTRA_H],
+            'Testing': [JsonFields.COLL_BA, JsonFields.COLL_BA_H, JsonFields.COLL_PC, JsonFields.COLL_PC_H, 
+                       JsonFields.COLL_PLC, JsonFields.COLL_PLC_H, JsonFields.COLL_LGV, JsonFields.COLL_LGV_H],
+            'Project Management': [JsonFields.PM_COST, JsonFields.PM_H, JsonFields.SPESE_PM],
+            'Documentation': [JsonFields.DOCUMENT, JsonFields.DOCUMENT_H],
+            'Logistics': [JsonFields.IMBALLO, JsonFields.STOCCAGGIO, JsonFields.TRASPORTO],
+            'Field Activities': [JsonFields.SITE, JsonFields.SITE_H, JsonFields.INSTALL, JsonFields.INSTALL_H, 
+                               JsonFields.AV_PC, JsonFields.AV_PC_H, JsonFields.AV_PLC, JsonFields.AV_PLC_H, 
+                               JsonFields.AV_LGV, JsonFields.AV_LGV_H],
+            'Additional': [JsonFields.SPESE_FIELD, JsonFields.SPESE_VARIE, JsonFields.AFTER_SALES, 
+                         JsonFields.PROVVIGIONI_ITALIA, JsonFields.PROVVIGIONI_ESTERO, 
+                         JsonFields.TESORETTO, JsonFields.MONTAGGIO_BEMA_MBE_US]
         }
         
         # Analyze field usage
@@ -791,8 +803,8 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         """Count items that have non-zero values in any field"""
         count = 0
         for group in self.product_groups:
-            for category in group.get('categories', []):
-                for item in category.get('items', []):
+            for category in group.get(JsonFields.CATEGORIES, []):
+                for item in category.get(JsonFields.ITEMS, []):
                     has_data = any(
                         isinstance(value, (int, float)) and value != 0 
                         for value in item.values()
@@ -804,36 +816,36 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
     # Implement abstract methods from base class
     def _get_group_total(self, group: Dict[str, Any]) -> float:
         """Get total listino value for a profittabilita group"""
-        return sum(cat.get('subtotal_listino', 0) for cat in group.get('categories', []))
+        return sum(cat.get(JsonFields.PRICELIST_SUBTOTAL, 0) for cat in group.get(JsonFields.CATEGORIES, []))
     
     def _get_category_total(self, category: Dict[str, Any]) -> float:
         """Get total listino value for a profittabilita category"""
-        return self._safe_float(category.get('subtotal_listino', 0))
+        return self._safe_float(category.get(JsonFields.PRICELIST_SUBTOTAL, 0))
     
     def _get_item_price(self, item: Dict[str, Any]) -> float:
         """Get listino total for a profittabilita item"""
-        return self._safe_float(item.get('listino_total', 0))
+        return self._safe_float(item.get(JsonFields.PRICELIST_TOTAL, 0))
     
     def _get_item_unit_price(self, item: Dict[str, Any]) -> float:
         """Get unit price for a profittabilita item"""
-        return self._safe_float(item.get('list_unit_price', 0))
+        return self._safe_float(item.get(JsonFields.PRICELIST_UNIT_PRICE, 0))
     
     def _get_category_specific_fields(self, category: Dict[str, Any]) -> Dict[str, Any]:
         """Get profittabilita-specific category fields"""
         return {
-            'Subtotal Listino (€)': self._safe_float(category.get('subtotal_listino', 0)),
-            'Subtotal Costo (€)': self._safe_float(category.get('subtotal_costo', 0)),
-            'Total Cost (€)': self._safe_float(category.get('total_cost', 0)),
-            'WBE': category.get('wbe', '')
+            'Subtotal Listino (€)': self._safe_float(category.get(JsonFields.PRICELIST_SUBTOTAL, 0)),
+            'Subtotal Costo (€)': self._safe_float(category.get(JsonFields.COST_SUBTOTAL, 0)),
+            'Total Cost (€)': self._safe_float(category.get(JsonFields.TOTAL_COST, 0)),
+            'WBE': category.get(JsonFields.WBE, '')
         }
     
     def _get_item_specific_fields(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """Get profittabilita-specific item fields"""
         return {
-            'Unit Cost (€)': self._safe_float(item.get('unit_cost', 0)),
-            'Total Cost (€)': self._safe_float(item.get('total_cost', 0)),
-            'UTM Robot': self._safe_float(item.get('utm_robot', 0)),
-            'PM Cost': self._safe_float(item.get('pm_cost', 0)),
-            'Install': self._safe_float(item.get('install', 0)),
-            'After Sales': self._safe_float(item.get('after_sales', 0))
+            'Unit Cost (€)': self._safe_float(item.get(JsonFields.UNIT_COST, 0)),
+            'Total Cost (€)': self._safe_float(item.get(JsonFields.TOTAL_COST, 0)),
+            'UTM Robot': self._safe_float(item.get(JsonFields.UTM_ROBOT, 0)),
+            'PM Cost': self._safe_float(item.get(JsonFields.PM_COST, 0)),
+            'Install': self._safe_float(item.get(JsonFields.INSTALL, 0)),
+            'After Sales': self._safe_float(item.get(JsonFields.AFTER_SALES, 0))
         } 

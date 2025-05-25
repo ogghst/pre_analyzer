@@ -170,8 +170,8 @@ class JsonFields:
     CATEGORY_CODE = "category_code"
     WBE = "wbe"
     ITEMS = "items"
-    SUBTOTAL_LISTINO = "subtotal_listino"
-    SUBTOTAL_COSTO = "subtotal_costo"
+    PRICELIST_SUBTOTAL = "pricelist_subtotal"
+    COST_SUBTOTAL = "cost_subtotal"
     TOTAL_COST = "total_cost"
     
     # Basic item fields
@@ -179,16 +179,17 @@ class JsonFields:
     CODE = "code"
     COD_LISTINO = "cod_listino"
     DESCRIPTION = "description"
-    QTA = "quantity"
-    LIST_UNIT_PRICE = "list_unit_price"
-    LISTINO_TOTAL = "listino_total"
-    COSTO_UNITARIO = "unit_cost"
-    COSTO_TOTALE = "total_cost"
+    QTY = "quantity"
+    PRICELIST_UNIT_PRICE = "list_unit_price"
+    PRICELIST_TOTAL = "listino_total"
+    UNIT_COST = "unit_cost"
+    TOTAL_COST = "total_cost"
+    INTERNAL_CODE = "internal_code"
     PRIORITY_ORDER = "priority_order"
     PRIORITY = "priority"
     LINE_NUMBER = "line_number"
     WBS = "wbs"
-    TOTALE = "totale"
+    TOTAL = "totale"
     
     # Material and UTM fields
     MAT = "mat"
@@ -349,34 +350,58 @@ class AnalisiProfittabilitaParser:
             }
         }
     
-    def extract_all_cell_values(self, row: int) -> Dict[str, Any]:
-        """Extract all cell values for a given row"""
-        values = {}
+    def _safe_cell_value(self, row: int, column: int, default: Any = None) -> Any:
+        """
+        Safely extract cell value by row and column index
         
-        # Extract all column values
-        for attr_name in dir(ExcelColumns):
-            if not attr_name.startswith('_'):
-                col_num = getattr(ExcelColumns, attr_name)
-                if isinstance(col_num, int):
-                    cell = self.ws.cell(row=row, column=col_num)
-                    values[attr_name.lower()] = self._safe_float(cell.value)
-        
-        return values
+        Args:
+            row: Row number (1-based)
+            column: Column number (1-based)
+            default: Default value if cell is empty or error occurs
+            
+        Returns:
+            Cell value or default
+        """
+        try:
+            cell_value = self.ws.cell(row=row, column=column).value
+            if cell_value is None:
+                return default
+            return cell_value
+        except Exception:
+            return default
+    
+    def _safe_cell_float(self, row: int, column: int, default: float = 0.0) -> float:
+        """Safely extract float value from cell"""
+        return self._safe_float(self._safe_cell_value(row, column), default)
+    
+    def _safe_cell_int(self, row: int, column: int, default: int = 0) -> int:
+        """Safely extract integer value from cell"""
+        return self._safe_int(self._safe_cell_value(row, column), default)
+    
+    def _safe_cell_str(self, row: int, column: int, default: str = "") -> str:
+        """Safely extract string value from cell"""
+        value = self._safe_cell_value(row, column, default)
+        return str(value) if value is not None else default
     
     def extract_product_groups(self) -> List[Dict[str, Any]]:
-        """Extract product groups, categories, and items with all columns"""
+        """Extract product groups, categories, and items with all columns using safe column access"""
         product_groups = []
         current_group = None
         current_category = None
         
         # Start from data start row
         for row in range(ExcelRows.DATA_START_ROW, self.ws.max_row + 1):
-            # Extract basic identification values
-            cod_val = self.ws.cell(row=row, column=ExcelColumns.COD).value
-            codice_val = self.ws.cell(row=row, column=ExcelColumns.CODICE).value
-            denominazione_val = self.ws.cell(row=row, column=ExcelColumns.DENOMINAZIONE).value
-            qta_val = self.ws.cell(row=row, column=ExcelColumns.QTA).value
-            wbe_val = self.ws.cell(row=row, column=ExcelColumns.WBE).value
+            
+            # Skip row if no priority value
+            if not self._safe_cell_value(row, ExcelColumns.PRIORITY):
+                continue
+            
+            # Extract basic identification values using safe column access
+            cod_val = self._safe_cell_value(row, ExcelColumns.COD)
+            codice_val = self._safe_cell_value(row, ExcelColumns.CODICE)
+            denominazione_val = self._safe_cell_value(row, ExcelColumns.DENOMINAZIONE)
+            qta_val = self._safe_cell_value(row, ExcelColumns.QTA)
+            wbe_val = self._safe_cell_value(row, ExcelColumns.WBE)
 
             # Check if this is a group header (TXT in CODICE)
             if codice_val and str(codice_val).startswith(IdentificationPatterns.GROUP_PREFIX):
@@ -396,18 +421,15 @@ class AnalisiProfittabilitaParser:
                 
             # Check if this is a category (4-char code in COD column)
             elif cod_val and len(str(cod_val).strip()) == IdentificationPatterns.CATEGORY_CODE_LENGTH and current_group:
-                # Extract all values for category
-                all_values = self.extract_all_cell_values(row)
-                
                 current_category = {
                     JsonFields.CATEGORY_ID: str(cod_val),
                     JsonFields.CATEGORY_CODE: str(codice_val) if codice_val else "",
                     JsonFields.CATEGORY_NAME: str(denominazione_val) if denominazione_val else "",
                     JsonFields.WBE: str(wbe_val) if wbe_val else "",
+                    JsonFields.PRICELIST_SUBTOTAL: self._safe_cell_float(row, ExcelColumns.SUB_TOT_LISTINO),
+                    JsonFields.COST_SUBTOTAL: self._safe_cell_float(row, ExcelColumns.SUBTOT_COSTO),
+                    JsonFields.TOTAL_COST: self._safe_cell_float(row, ExcelColumns.COSTO_TOTALE),
                     JsonFields.ITEMS: [],
-                    JsonFields.SUBTOTAL_LISTINO: all_values.get('sub_tot_listino', 0.0),
-                    JsonFields.SUBTOTAL_COSTO: all_values.get('subtot_costo', 0.0),
-                    JsonFields.TOTAL_COST: all_values.get('costo_totale', 0.0)
                 }
                 current_group[JsonFields.CATEGORIES].append(current_category)
                 logger.info(LogMessages.CATEGORY_FOUND.format(cod_val))
@@ -418,97 +440,95 @@ class AnalisiProfittabilitaParser:
                 and not (cod_val and len(str(cod_val).strip()) == IdentificationPatterns.CATEGORY_CODE_LENGTH) \
                 and str(denominazione_val) != "DENOMINAZIONE":  # Skip header row
                 
-                # Extract all values for item
-                all_values = self.extract_all_cell_values(row)
-                
                 item = {
-                    # Basic identification
+                    # Basic identification - using safe column access
                     JsonFields.POSITION: str(row),
-                    JsonFields.CODE: str(codice_val) if codice_val else "",
-                    JsonFields.COD_LISTINO: str(all_values.get('cod_listino', '')),
+                    JsonFields.CODE: self._safe_cell_str(row, ExcelColumns.CODICE),
+                    JsonFields.COD_LISTINO: self._safe_cell_str(row, ExcelColumns.COD_LISTINO),
                     JsonFields.DESCRIPTION: str(denominazione_val),
-                    JsonFields.QTA: all_values.get('qta', 0.0),
-                    JsonFields.LIST_UNIT_PRICE: all_values.get('list_unit', 0.0),
-                    JsonFields.LISTINO_TOTAL: all_values.get('listino_totale', 0.0),
-                    JsonFields.COSTO_UNITARIO: all_values.get('costo_unitario', 0.0),
-                    JsonFields.COSTO_TOTALE: all_values.get('costo_totale', 0.0),
-                    JsonFields.PRIORITY_ORDER: self._safe_int(all_values.get('priority_order', 0)),
-                    JsonFields.PRIORITY: self._safe_int(all_values.get('priority', 0)),
-                    JsonFields.LINE_NUMBER: self._safe_int(all_values.get('line_number', 0)),
-                    JsonFields.WBS: str(all_values.get('wbs', '')),
-                    JsonFields.TOTALE: all_values.get('totale', 0.0),
+                    JsonFields.QTY: self._safe_cell_float(row, ExcelColumns.QTA),
+                    JsonFields.PRICELIST_UNIT_PRICE: self._safe_cell_float(row, ExcelColumns.LIST_UNIT),
+                    JsonFields.PRICELIST_TOTAL: self._safe_cell_float(row, ExcelColumns.LISTINO_TOTALE),
+                    JsonFields.UNIT_COST: self._safe_cell_float(row, ExcelColumns.COSTO_UNITARIO),
+                    JsonFields.TOTAL_COST: self._safe_cell_float(row, ExcelColumns.COSTO_TOTALE),
+                    JsonFields.INTERNAL_CODE: self._safe_cell_str(row, ExcelColumns.COD_2),
+                    JsonFields.PRIORITY_ORDER: self._safe_cell_int(row, ExcelColumns.PRIORITY_ORDER),
+                    JsonFields.PRIORITY: self._safe_cell_int(row, ExcelColumns.PRIORITY),
+                    JsonFields.LINE_NUMBER: self._safe_cell_int(row, ExcelColumns.LINE_NUMBER),
+                    JsonFields.WBS: self._safe_cell_str(row, ExcelColumns.WBS),
+                    JsonFields.TOTAL: self._safe_cell_float(row, ExcelColumns.TOTALE),
                     
-                    # Material and UTM fields
-                    JsonFields.MAT: all_values.get('mat', 0.0),
-                    JsonFields.UTM_ROBOT: all_values.get('utm_robot', 0.0),
-                    JsonFields.UTM_ROBOT_H: all_values.get('utm_robot_h', 0.0),
-                    JsonFields.UTM_LGV: all_values.get('utm_lgv', 0.0),
-                    JsonFields.UTM_LGV_H: all_values.get('utm_lgv_h', 0.0),
-                    JsonFields.UTM_INTRA: all_values.get('utm_intra', 0.0),
-                    JsonFields.UTM_INTRA_H: all_values.get('utm_intra_h', 0.0),
-                    JsonFields.UTM_LAYOUT: all_values.get('utm_layout', 0.0),
-                    JsonFields.UTM_LAYOUT_H: all_values.get('utm_layout_h', 0.0),
+                    # Material and UTM fields - using safe column access
+                    JsonFields.MAT: self._safe_cell_float(row, ExcelColumns.MAT),
+                    JsonFields.UTM_ROBOT: self._safe_cell_float(row, ExcelColumns.UTM_ROBOT),
+                    JsonFields.UTM_ROBOT_H: self._safe_cell_float(row, ExcelColumns.UTM_ROBOT_H),
+                    JsonFields.UTM_LGV: self._safe_cell_float(row, ExcelColumns.UTM_LGV),
+                    JsonFields.UTM_LGV_H: self._safe_cell_float(row, ExcelColumns.UTM_LGV_H),
+                    JsonFields.UTM_INTRA: self._safe_cell_float(row, ExcelColumns.UTM_INTRA),
+                    JsonFields.UTM_INTRA_H: self._safe_cell_float(row, ExcelColumns.UTM_INTRA_H),
+                    JsonFields.UTM_LAYOUT: self._safe_cell_float(row, ExcelColumns.UTM_LAYOUT),
+                    JsonFields.UTM_LAYOUT_H: self._safe_cell_float(row, ExcelColumns.UTM_LAYOUT_H),
                     
-                    # Engineering fields
-                    JsonFields.UTE: all_values.get('ute', 0.0),
-                    JsonFields.UTE_H: all_values.get('ute_h', 0.0),
-                    JsonFields.BA: all_values.get('ba', 0.0),
-                    JsonFields.BA_H: all_values.get('ba_h', 0.0),
-                    JsonFields.SW_PC: all_values.get('sw_pc', 0.0),
-                    JsonFields.SW_PC_H: all_values.get('sw_pc_h', 0.0),
-                    JsonFields.SW_PLC: all_values.get('sw_plc', 0.0),
-                    JsonFields.SW_PLC_H: all_values.get('sw_plc_h', 0.0),
-                    JsonFields.SW_LGV: all_values.get('sw_lgv', 0.0),
-                    JsonFields.SW_LGV_H: all_values.get('sw_lgv_h', 0.0),
+                    # Engineering fields - using safe column access
+                    JsonFields.UTE: self._safe_cell_float(row, ExcelColumns.UTE),
+                    JsonFields.UTE_H: self._safe_cell_float(row, ExcelColumns.UTE_H),
+                    JsonFields.BA: self._safe_cell_float(row, ExcelColumns.BA),
+                    JsonFields.BA_H: self._safe_cell_float(row, ExcelColumns.BA_H),
+                    JsonFields.SW_PC: self._safe_cell_float(row, ExcelColumns.SW_PC),
+                    JsonFields.SW_PC_H: self._safe_cell_float(row, ExcelColumns.SW_PC_H),
+                    JsonFields.SW_PLC: self._safe_cell_float(row, ExcelColumns.SW_PLC),
+                    JsonFields.SW_PLC_H: self._safe_cell_float(row, ExcelColumns.SW_PLC_H),
+                    JsonFields.SW_LGV: self._safe_cell_float(row, ExcelColumns.SW_LGV),
+                    JsonFields.SW_LGV_H: self._safe_cell_float(row, ExcelColumns.SW_LGV_H),
                     
-                    # Manufacturing fields
-                    JsonFields.MTG_MEC: all_values.get('mtg_mec', 0.0),
-                    JsonFields.MTG_MEC_H: all_values.get('mtg_mec_h', 0.0),
-                    JsonFields.MTG_MEC_INTRA: all_values.get('mtg_mec_intra', 0.0),
-                    JsonFields.MTG_MEC_INTRA_H: all_values.get('mtg_mec_intra_h', 0.0),
-                    JsonFields.CAB_ELE: all_values.get('cab_ele', 0.0),
-                    JsonFields.CAB_ELE_H: all_values.get('cab_ele_h', 0.0),
-                    JsonFields.CAB_ELE_INTRA: all_values.get('cab_ele_intra', 0.0),
-                    JsonFields.CAB_ELE_INTRA_H: all_values.get('cab_ele_intra_h', 0.0),
-                    JsonFields.COLL_BA: all_values.get('coll_ba', 0.0),
-                    JsonFields.COLL_BA_H: all_values.get('coll_ba_h', 0.0),
+                    # Manufacturing fields - using safe column access
+                    JsonFields.MTG_MEC: self._safe_cell_float(row, ExcelColumns.MTG_MEC),
+                    JsonFields.MTG_MEC_H: self._safe_cell_float(row, ExcelColumns.MTG_MEC_H),
+                    JsonFields.MTG_MEC_INTRA: self._safe_cell_float(row, ExcelColumns.MTG_MEC_INTRA),
+                    JsonFields.MTG_MEC_INTRA_H: self._safe_cell_float(row, ExcelColumns.MTG_MEC_INTRA_H),
+                    JsonFields.CAB_ELE: self._safe_cell_float(row, ExcelColumns.CAB_ELE),
+                    JsonFields.CAB_ELE_H: self._safe_cell_float(row, ExcelColumns.CAB_ELE_H),
+                    JsonFields.CAB_ELE_INTRA: self._safe_cell_float(row, ExcelColumns.CAB_ELE_INTRA),
+                    JsonFields.CAB_ELE_INTRA_H: self._safe_cell_float(row, ExcelColumns.CAB_ELE_INTRA_H),
+                    JsonFields.COLL_BA: self._safe_cell_float(row, ExcelColumns.COLL_BA),
+                    JsonFields.COLL_BA_H: self._safe_cell_float(row, ExcelColumns.COLL_BA_H),
                     
-                    # Testing fields
-                    JsonFields.COLL_PC: all_values.get('coll_pc', 0.0),
-                    JsonFields.COLL_PC_H: all_values.get('coll_pc_h', 0.0),
-                    JsonFields.COLL_PLC: all_values.get('coll_plc', 0.0),
-                    JsonFields.COLL_PLC_H: all_values.get('coll_plc_h', 0.0),
-                    JsonFields.COLL_LGV: all_values.get('coll_lgv', 0.0),
-                    JsonFields.COLL_LGV_H: all_values.get('coll_lgv_h', 0.0),
-                    JsonFields.PM_COST: all_values.get('pm_cost', 0.0),
-                    JsonFields.PM_H: all_values.get('pm_h', 0.0),
-                    JsonFields.SPESE_PM: all_values.get('spese_pm', 0.0),
-                    JsonFields.DOCUMENT: all_values.get('document', 0.0),
+                    # Testing fields - using safe column access
+                    JsonFields.COLL_PC: self._safe_cell_float(row, ExcelColumns.COLL_PC),
+                    JsonFields.COLL_PC_H: self._safe_cell_float(row, ExcelColumns.COLL_PC_H),
+                    JsonFields.COLL_PLC: self._safe_cell_float(row, ExcelColumns.COLL_PLC),
+                    JsonFields.COLL_PLC_H: self._safe_cell_float(row, ExcelColumns.COLL_PLC_H),
+                    JsonFields.COLL_LGV: self._safe_cell_float(row, ExcelColumns.COLL_LGV),
+                    JsonFields.COLL_LGV_H: self._safe_cell_float(row, ExcelColumns.COLL_LGV_H),
+                    JsonFields.PM_COST: self._safe_cell_float(row, ExcelColumns.PM_COST),
+                    JsonFields.PM_H: self._safe_cell_float(row, ExcelColumns.PM_H),
+                    JsonFields.SPESE_PM: self._safe_cell_float(row, ExcelColumns.SPESE_PM),
+                    JsonFields.DOCUMENT: self._safe_cell_float(row, ExcelColumns.DOCUMENT),
                     
-                    # Logistics and field fields
-                    JsonFields.DOCUMENT_H: all_values.get('document_h', 0.0),
-                    JsonFields.IMBALLO: all_values.get('imballo', 0.0),
-                    JsonFields.STOCCAGGIO: all_values.get('stoccaggio', 0.0),
-                    JsonFields.TRASPORTO: all_values.get('trasporto', 0.0),
-                    JsonFields.SITE: all_values.get('site', 0.0),
-                    JsonFields.SITE_H: all_values.get('site_h', 0.0),
-                    JsonFields.INSTALL: all_values.get('install', 0.0),
-                    JsonFields.INSTALL_H: all_values.get('install_h', 0.0),
-                    JsonFields.AV_PC: all_values.get('av_pc', 0.0),
-                    JsonFields.AV_PC_H: all_values.get('av_pc_h', 0.0),
+                    # Logistics and field fields - using safe column access
+                    JsonFields.DOCUMENT_H: self._safe_cell_float(row, ExcelColumns.DOCUMENT_H),
+                    JsonFields.IMBALLO: self._safe_cell_float(row, ExcelColumns.IMBALLO),
+                    JsonFields.STOCCAGGIO: self._safe_cell_float(row, ExcelColumns.STOCCAGGIO),
+                    JsonFields.TRASPORTO: self._safe_cell_float(row, ExcelColumns.TRASPORTO),
+                    JsonFields.SITE: self._safe_cell_float(row, ExcelColumns.SITE),
+                    JsonFields.SITE_H: self._safe_cell_float(row, ExcelColumns.SITE_H),
+                    JsonFields.INSTALL: self._safe_cell_float(row, ExcelColumns.INSTALL),
+                    JsonFields.INSTALL_H: self._safe_cell_float(row, ExcelColumns.INSTALL_H),
+                    JsonFields.AV_PC: self._safe_cell_float(row, ExcelColumns.AV_PC),
+                    JsonFields.AV_PC_H: self._safe_cell_float(row, ExcelColumns.AV_PC_H),
                     
-                    # Additional field fields
-                    JsonFields.AV_PLC: all_values.get('av_plc', 0.0),
-                    JsonFields.AV_PLC_H: all_values.get('av_plc_h', 0.0),
-                    JsonFields.AV_LGV: all_values.get('av_lgv', 0.0),
-                    JsonFields.AV_LGV_H: all_values.get('av_lgv_h', 0.0),
-                    JsonFields.SPESE_FIELD: all_values.get('spese_field', 0.0),
-                    JsonFields.SPESE_VARIE: all_values.get('spese_varie', 0.0),
-                    JsonFields.AFTER_SALES: all_values.get('after_sales', 0.0),
-                    JsonFields.PROVVIGIONI_ITALIA: all_values.get('provvigioni_italia', 0.0),
-                    JsonFields.PROVVIGIONI_ESTERO: all_values.get('provvigioni_estero', 0.0),
-                    JsonFields.TESORETTO: all_values.get('tesoretto', 0.0),
-                    JsonFields.MONTAGGIO_BEMA_MBE_US: all_values.get('montaggio_bema_mbe_us', 0.0)
+                    # Additional field fields - using safe column access
+                    JsonFields.AV_PLC: self._safe_cell_float(row, ExcelColumns.AV_PLC),
+                    JsonFields.AV_PLC_H: self._safe_cell_float(row, ExcelColumns.AV_PLC_H),
+                    JsonFields.AV_LGV: self._safe_cell_float(row, ExcelColumns.AV_LGV),
+                    JsonFields.AV_LGV_H: self._safe_cell_float(row, ExcelColumns.AV_LGV_H),
+                    JsonFields.SPESE_FIELD: self._safe_cell_float(row, ExcelColumns.SPESE_FIELD),
+                    JsonFields.SPESE_VARIE: self._safe_cell_float(row, ExcelColumns.SPESE_VARIE),
+                    JsonFields.AFTER_SALES: self._safe_cell_float(row, ExcelColumns.AFTER_SALES),
+                    JsonFields.PROVVIGIONI_ITALIA: self._safe_cell_float(row, ExcelColumns.PROVVIGIONI_ITALIA),
+                    JsonFields.PROVVIGIONI_ESTERO: self._safe_cell_float(row, ExcelColumns.PROVVIGIONI_ESTERO),
+                    JsonFields.TESORETTO: self._safe_cell_float(row, ExcelColumns.TESORETTO),
+                    JsonFields.MONTAGGIO_BEMA_MBE_US: self._safe_cell_float(row, ExcelColumns.MONTAGGIO_BEMA_MBE_US)
                 }
                 
                 current_category[JsonFields.ITEMS].append(item)
@@ -521,16 +541,16 @@ class AnalisiProfittabilitaParser:
         # Calculate category totals
         for group in product_groups:
             for category in group[JsonFields.CATEGORIES]:
-                if not category[JsonFields.SUBTOTAL_LISTINO]:
-                    category[JsonFields.SUBTOTAL_LISTINO] = sum(
-                        item[JsonFields.LISTINO_TOTAL] for item in category[JsonFields.ITEMS]
+                if not category[JsonFields.PRICELIST_SUBTOTAL]:
+                    category[JsonFields.PRICELIST_SUBTOTAL] = sum(
+                        item[JsonFields.PRICELIST_TOTAL] for item in category[JsonFields.ITEMS]
                     )
-                if not category[JsonFields.SUBTOTAL_COSTO]:
-                    category[JsonFields.SUBTOTAL_COSTO] = sum(
-                        item[JsonFields.COSTO_TOTALE] for item in category[JsonFields.ITEMS]
+                if not category[JsonFields.COST_SUBTOTAL]:
+                    category[JsonFields.COST_SUBTOTAL] = sum(
+                        item[JsonFields.TOTAL_COST] for item in category[JsonFields.ITEMS]
                     )
                 if not category[JsonFields.TOTAL_COST]:
-                    category[JsonFields.TOTAL_COST] = category[JsonFields.SUBTOTAL_COSTO]
+                    category[JsonFields.TOTAL_COST] = category[JsonFields.COST_SUBTOTAL]
         
         return product_groups
     
@@ -542,8 +562,8 @@ class AnalisiProfittabilitaParser:
         # Sum up all costs and revenues from all categories
         for group in product_groups:
             for category in group[JsonFields.CATEGORIES]:
-                total_listino += category.get(JsonFields.SUBTOTAL_LISTINO, 0)
-                total_costo += category.get(JsonFields.SUBTOTAL_COSTO, 0)
+                total_listino += category.get(JsonFields.PRICELIST_SUBTOTAL, 0)
+                total_costo += category.get(JsonFields.COST_SUBTOTAL, 0)
         
         # Calculate margin
         margin = total_listino - total_costo
