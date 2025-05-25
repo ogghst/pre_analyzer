@@ -4,5 +4,6 @@ from .base_analyzer import BaseAnalyzer
 from .pre_analyzer import PreAnalyzer
 from .profittabilita_analyzer import ProfittabilitaAnalyzer
 from .pre_comparator import PreComparator
+from .profittabilita_comparator import ProfittabilitaComparator
 
-__all__ = ['BaseAnalyzer', 'PreAnalyzer', 'ProfittabilitaAnalyzer', 'PreComparator'] 
+__all__ = ['BaseAnalyzer', 'PreAnalyzer', 'ProfittabilitaAnalyzer', 'PreComparator', 'ProfittabilitaComparator'] 

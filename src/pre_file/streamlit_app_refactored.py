@@ -58,31 +58,56 @@ class ExcelAnalyzerApp:
             raise ValueError(f"Unsupported file type: {file_type}")
     
     def render_comparator_section(self):
-        """Render PRE comparator access section in sidebar"""
-        if self.current_file_type == FileType.PRE_FILE and self.current_data is not None:
+        """Render file comparator access section in sidebar"""
+        if self.current_data is not None:
             st.sidebar.markdown("---")
-            st.sidebar.header("🔄 PRE Comparison")
-            st.sidebar.markdown("""
-            **Want to compare this PRE file with another?**
+            st.sidebar.header("🔄 File Comparison")
             
-            Use the dedicated PRE File Comparator to analyze differences between two quotation files.
-            """)
-            
-            if st.sidebar.button("🚀 Launch PRE Comparator", type="primary", use_container_width=True):
+            if self.current_file_type == FileType.PRE_FILE:
                 st.sidebar.markdown("""
-                **To use the comparator:**
-                1. Open a new browser tab
-                2. Navigate to the PRE file directory: `src/pre_file`
-                3. Run: `streamlit run pre_comparator_app.py`
-                4. Upload both files for comparison
+                **Want to compare this PRE file with another?**
                 
-                Or run directly:
-                ```bash
-                cd src/pre_file
-                streamlit run pre_comparator_app.py
-                ```
+                Use the dedicated PRE File Comparator to analyze differences between two quotation files.
                 """)
-                st.sidebar.info("💡 The comparator runs as a separate application for optimal performance.")
+                
+                if st.sidebar.button("🚀 Launch PRE Comparator", type="primary", use_container_width=True):
+                    st.sidebar.markdown("""
+                    **To use the PRE comparator:**
+                    1. Open a new browser tab
+                    2. Navigate to the PRE file directory: `src/pre_file`
+                    3. Run: `streamlit run pre_comparator_app.py`
+                    4. Upload both files for comparison
+                    
+                    Or run directly:
+                    ```bash
+                    cd src/pre_file
+                    streamlit run pre_comparator_app.py
+                    ```
+                    """)
+                    st.sidebar.info("💡 The comparator runs as a separate application for optimal performance.")
+                    
+            elif self.current_file_type == FileType.ANALISI_PROFITTABILITA:
+                st.sidebar.markdown("""
+                **Want to compare this Analisi Profittabilita file with another?**
+                
+                Use the dedicated Analisi Profittabilita Comparator to analyze differences in WBE, cost elements, UTM, and types.
+                """)
+                
+                if st.sidebar.button("🚀 Launch Profittabilita Comparator", type="primary", use_container_width=True):
+                    st.sidebar.markdown("""
+                    **To use the Profittabilita comparator:**
+                    1. Open a new browser tab
+                    2. Navigate to the PRE file directory: `src/pre_file`
+                    3. Run: `streamlit run profittabilita_comparator_app.py`
+                    4. Upload both files for comparison
+                    
+                    Or run directly:
+                    ```bash
+                    cd src/pre_file
+                    streamlit run profittabilita_comparator_app.py
+                    ```
+                    """)
+                    st.sidebar.info("💡 The comparator specializes in WBE, UTM, cost elements, and equipment types comparison.")
     
     def render_analysis_view(self, analyzer, view_name: str):
         """
