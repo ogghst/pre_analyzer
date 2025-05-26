@@ -174,7 +174,7 @@ class PreFileParser:
         try:
             self.workbook = load_workbook(self.file_path, data_only=True)
             # Use the first worksheet
-            self.ws = self.workbook.active
+            self.ws = self.workbook['OFFER1']
             logger.info(LogMessages.WORKBOOK_LOADED.format(self.ws.max_row, self.ws.max_column))
         except FileNotFoundError:
             raise FileNotFoundError(ErrorMessages.FILE_NOT_FOUND.format(self.file_path))
@@ -420,7 +420,7 @@ class PreFileParser:
             return str_value.split(':', 1)[1].strip()
         return str_value.strip()
 
-def parse_excel_to_json(file_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
+def parse_pre_to_json(file_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Main function to parse Excel file and optionally save to JSON
     
@@ -448,7 +448,7 @@ if __name__ == "__main__":
     output_file = "output/quotation.json"
     
     try:
-        result = parse_excel_to_json(input_file, output_file)
+        result = parse_pre_to_json(input_file, output_file)
         print("Parsing completed successfully!")
         print(f"Project ID: {result['project']['id']}")
         print(f"Customer: {result['project']['customer']}")

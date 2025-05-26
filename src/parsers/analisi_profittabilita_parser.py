@@ -313,7 +313,7 @@ class AnalisiProfittabilitaParser:
         try:
             self.workbook = load_workbook(self.file_path, data_only=True)
             # Use the first worksheet (typically 'NEW_OFFER1')
-            self.ws = self.workbook.active
+            self.ws = self.workbook['NEW_OFFER1']
             logger.info(LogMessages.WORKBOOK_LOADED.format(self.ws.max_row, self.ws.max_column))
         except FileNotFoundError:
             raise FileNotFoundError(ErrorMessages.FILE_NOT_FOUND.format(self.file_path))

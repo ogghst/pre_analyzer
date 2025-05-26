@@ -15,8 +15,16 @@ parent_dir = os.path.dirname(os.path.dirname(__file__))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from pre_file_parser import parse_excel_to_json
-from analisi_profittabilita_parser import parse_analisi_profittabilita_to_json
+# Import parsers with error handling
+def _import_parsers():
+    """Import parsers with proper error handling"""
+    try:
+        from parsers.pre_file_parser import parse_pre_to_json
+        from parsers.analisi_profittabilita_parser import parse_analisi_profittabilita_to_json
+        return parse_pre_to_json, parse_analisi_profittabilita_to_json
+    except ImportError as e:
+        # Fallback imports or raise more specific error
+        raise ImportError(f"Could not import parsers: {e}. Make sure you're running from the src directory.")
 
 
 class FileType(Enum):
@@ -82,6 +90,9 @@ class FileProcessor:
                 temp_file_path = tmp_file.name
             
             try:
+                # Import parsers when needed
+                parse_excel_to_json, parse_analisi_profittabilita_to_json = _import_parsers()
+                
                 # Process based on file type
                 if file_type == FileType.PRE_FILE:
                     data = parse_excel_to_json(temp_file_path)
