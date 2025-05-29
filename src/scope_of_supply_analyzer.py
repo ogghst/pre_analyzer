@@ -10,6 +10,7 @@ import tempfile
 import os
 from typing import Optional, Tuple, Dict, Any
 from enum import Enum
+import locale
 
 # Import components
 from components.file_processor import render_file_upload_component, render_file_metrics, FileType
@@ -1141,6 +1142,9 @@ class ProjectStructureAnalyzer:
 def main():
     """Application entry point"""
     try:
+        
+        locale.setlocale(locale.LC_ALL, 'it_IT.UTF-8')
+        
         app = ProjectStructureAnalyzer()
         app.run()
     except Exception as e:

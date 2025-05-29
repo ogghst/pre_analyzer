@@ -84,16 +84,26 @@ class ProfittabilitaComparator:
         total_items = sum(len(cat.get(JsonFields.ITEMS, [])) for group in product_groups for cat in group.get(JsonFields.CATEGORIES, []))
         st.metric("Total Items", total_items)
         
-        # Financial
+        # Financial - including VA21 offer prices if available
         total_listino = totals.get(JsonFields.TOTAL_LISTINO, 0)
         total_costo = totals.get(JsonFields.TOTAL_COSTO, 0)
+        total_offer = totals.get(JsonFields.TOTAL_OFFER, 0)
         margin = totals.get(JsonFields.MARGIN, 0)
         margin_perc = totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
+        offer_margin = totals.get(JsonFields.OFFER_MARGIN, 0)
+        offer_margin_perc = totals.get(JsonFields.OFFER_MARGIN_PERCENTAGE, 0)
         
         st.metric("Total Listino", f"€{total_listino:,.2f}")
-        st.metric("Total Costo", f"€{total_costo:,.2f}")
-        st.metric("Margin", f"€{margin:,.2f}")
-        st.metric("Margin %", f"{margin_perc:.2f}%")
+        st.metric("Total Cost", f"€{total_costo:,.2f}")
+        
+        # Show offer price if available (from VA21)
+        if total_offer > 0:
+            st.metric("Total Offer (VA21)", f"€{total_offer:,.2f}")
+            st.metric("Offer Margin", f"€{offer_margin:,.2f}")
+            st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%")
+        else:
+            st.metric("Listino Margin", f"€{margin:,.2f}")
+            st.metric("Listino Margin %", f"{margin_perc:.2f}%")
     
     def _display_project_differences(self):
         """Display key differences between projects"""
@@ -123,19 +133,28 @@ class ProfittabilitaComparator:
         if groups1_count != groups2_count:
             differences.append({"Field": "Product Groups Count", self.name1: groups1_count, self.name2: groups2_count})
         
-        # Compare totals
+        # Compare totals - including offer prices
         total_fields = [
             (JsonFields.TOTAL_LISTINO, "Total Listino"),
-            (JsonFields.TOTAL_COSTO, "Total Costo"),
-            (JsonFields.MARGIN, "Margin"),
-            (JsonFields.MARGIN_PERCENTAGE, "Margin %")
+            (JsonFields.TOTAL_COSTO, "Total Cost"),
+            (JsonFields.TOTAL_OFFER, "Total Offer (VA21)"),
+            (JsonFields.MARGIN, "Listino Margin"),
+            (JsonFields.MARGIN_PERCENTAGE, "Listino Margin %"),
+            (JsonFields.OFFER_MARGIN, "Offer Margin"),
+            (JsonFields.OFFER_MARGIN_PERCENTAGE, "Offer Margin %")
         ]
         
         for field, display_name in total_fields:
             val1 = self.totals1.get(field, 0)
             val2 = self.totals2.get(field, 0)
             diff = abs(val1 - val2)
-            if field == JsonFields.MARGIN_PERCENTAGE:
+            
+            # Only show offer-related fields if at least one file has offer data
+            if field in [JsonFields.TOTAL_OFFER, JsonFields.OFFER_MARGIN, JsonFields.OFFER_MARGIN_PERCENTAGE]:
+                if val1 == 0 and val2 == 0:
+                    continue  # Skip if both files have no offer data
+            
+            if field in [JsonFields.MARGIN_PERCENTAGE, JsonFields.OFFER_MARGIN_PERCENTAGE]:
                 if diff > 0.1:  # Threshold for percentage differences
                     differences.append({"Field": display_name, self.name1: f"{val1:.2f}%", self.name2: f"{val2:.2f}%"})
             else:
@@ -156,11 +175,45 @@ class ProfittabilitaComparator:
         profit_data1 = self._prepare_profitability_data(self.totals1, self.name1)
         profit_data2 = self._prepare_profitability_data(self.totals2, self.name2)
         
-        # Display comparison table
+        # Display comparison table - including offer prices
         st.subheader("📊 Profitability Metrics Comparison")
         
-        comparison_data = {
-            'Metric': ['Total Listino (€)', 'Total Costo (€)', 'Margin (€)', 'Margin (%)'],
+        # Determine which metrics to show based on available data
+        has_offer_data1 = profit_data1.get('total_offer', 0) > 0
+        has_offer_data2 = profit_data2.get('total_offer', 0) > 0
+        has_any_offer_data = has_offer_data1 or has_offer_data2
+        
+        if has_any_offer_data:
+            # Show extended comparison with offer data
+            comparison_data = {
+                    'Metric': [
+                        'Total Listino (€)', 'Total Cost (€)', 'Total Offer VA21 (€)', 
+                        'Listino Margin (€)', 'Listino Margin (%)', 
+                        'Offer Margin (€)', 'Offer Margin (%)'
+                    ],
+                    self.name1: [
+                        profit_data1['total_listino'],
+                        profit_data1['total_costo'],
+                        profit_data1.get('total_offer', 0),
+                        profit_data1['margin'],
+                        profit_data1['margin_perc'],
+                        profit_data1.get('offer_margin', 0),
+                        profit_data1.get('offer_margin_perc', 0)
+                    ],
+                    self.name2: [
+                        profit_data2['total_listino'],
+                        profit_data2['total_costo'],
+                        profit_data2.get('total_offer', 0),
+                        profit_data2['margin'],
+                        profit_data2['margin_perc'],
+                        profit_data2.get('offer_margin', 0),
+                        profit_data2.get('offer_margin_perc', 0)
+                    ]
+                }
+        else:
+            # Show basic comparison without offer data
+            comparison_data = {
+                'Metric': ['Total Listino (€)', 'Total Cost (€)', 'Margin (€)', 'Margin (%)'],
             self.name1: [
                 profit_data1['total_listino'],
                 profit_data1['total_costo'],
@@ -176,46 +229,76 @@ class ProfittabilitaComparator:
         }
         
         df_profit = pd.DataFrame(comparison_data)
+        # Calculate differences with safe division
         df_profit['Difference'] = df_profit[self.name2] - df_profit[self.name1]
-        df_profit['Difference %'] = ((df_profit[self.name2] - df_profit[self.name1]) / df_profit[self.name1] * 100).round(2)
+        df_profit['Difference %'] = df_profit.apply(
+            lambda row: ((row[self.name2] - row[self.name1]) / row[self.name1] * 100) if row[self.name1] != 0 else 0, axis=1
+        ).round(2)
         
         st.dataframe(df_profit, use_container_width=True)
         
-        # Side-by-side charts
+        # Side-by-side charts with offer data if available
         col1, col2 = st.columns(2)
         
         with col1:
-            # File 1 pie chart
+            # File 1 pie chart - choose between listino and offer
+            if has_offer_data1:
+                values1 = [profit_data1['total_costo'], profit_data1.get('offer_margin', 0)]
+                title1 = f'{self.name1} - Cost vs Offer Margin'
+            else:
+                values1 = [profit_data1['total_costo'], profit_data1['margin']]
+                title1 = f'{self.name1} - Cost vs Listino Margin'
+                
             fig1 = px.pie(
-                values=[profit_data1['total_costo'], profit_data1['margin']],
-                names=['Total Costo', 'Margin'],
-                title=f'{self.name1} - Cost vs Margin',
-                color_discrete_map={'Total Costo': '#ff6b6b', 'Margin': '#51cf66'}
+                values=values1,
+                names=['Total Cost', 'Margin'],
+                title=title1,
+                color_discrete_map={'Total Cost': '#ff6b6b', 'Margin': '#51cf66'}
             )
             fig1.update_layout(height=400)
             st.plotly_chart(fig1, use_container_width=True)
         
         with col2:
-            # File 2 pie chart
+            # File 2 pie chart - choose between listino and offer
+            if has_offer_data2:
+                values2 = [profit_data2['total_costo'], profit_data2.get('offer_margin', 0)]
+                title2 = f'{self.name2} - Cost vs Offer Margin'
+            else:
+                values2 = [profit_data2['total_costo'], profit_data2['margin']]
+                title2 = f'{self.name2} - Cost vs Listino Margin'
+                
             fig2 = px.pie(
-                values=[profit_data2['total_costo'], profit_data2['margin']],
-                names=['Total Costo', 'Margin'],
-                title=f'{self.name2} - Cost vs Margin',
-                color_discrete_map={'Total Costo': '#ff6b6b', 'Margin': '#51cf66'}
+                values=values2,
+                names=['Total Cost', 'Margin'],
+                title=title2,
+                color_discrete_map={'Total Cost': '#ff6b6b', 'Margin': '#51cf66'}
             )
             fig2.update_layout(height=400)
             st.plotly_chart(fig2, use_container_width=True)
         
-        # Difference visualization
+        # Difference visualization - prioritize offer margin if available
         st.subheader("📈 Profitability Differences Analysis")
         
-        # Bar chart showing margin differences
-        fig_diff = px.bar(
-            x=['Margin (€)', 'Margin (%)'],
-            y=[df_profit.iloc[2]['Difference'], df_profit.iloc[3]['Difference']],
-            title='Profitability Differences (File 2 - File 1)',
-            color_discrete_sequence=['#4CAF50']
-        )
+        if has_any_offer_data:
+            # Show offer margin differences
+            offer_margin_diff = df_profit.iloc[5]['Difference'] if len(df_profit) > 5 else 0
+            offer_margin_perc_diff = df_profit.iloc[6]['Difference'] if len(df_profit) > 6 else 0
+            
+            fig_diff = px.bar(
+                x=['Offer Margin (€)', 'Offer Margin (%)'],
+                y=[offer_margin_diff, offer_margin_perc_diff],
+                title='Offer-Based Profitability Differences (File 2 - File 1)',
+                color_discrete_sequence=['#4CAF50']
+            )
+        else:
+            # Show listino margin differences
+            fig_diff = px.bar(
+                x=['Margin (€)', 'Margin (%)'],
+                y=[df_profit.iloc[2]['Difference'], df_profit.iloc[3]['Difference']],
+                    title='Listino-Based Profitability Differences (File 2 - File 1)',
+                color_discrete_sequence=['#4CAF50']
+            )
+        
         fig_diff.update_layout(height=400)
         st.plotly_chart(fig_diff, use_container_width=True)
     
@@ -223,14 +306,20 @@ class ProfittabilitaComparator:
         """Prepare profitability data for a single file"""
         total_listino = totals.get(JsonFields.TOTAL_LISTINO, 0)
         total_costo = totals.get(JsonFields.TOTAL_COSTO, 0)
+        total_offer = totals.get(JsonFields.TOTAL_OFFER, 0)
         margin = totals.get(JsonFields.MARGIN, 0)
         margin_perc = totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
+        offer_margin = totals.get(JsonFields.OFFER_MARGIN, 0)
+        offer_margin_perc = totals.get(JsonFields.OFFER_MARGIN_PERCENTAGE, 0)
         
         return {
             'total_listino': total_listino,
             'total_costo': total_costo,
+            'total_offer': total_offer,
             'margin': margin,
-            'margin_perc': margin_perc
+            'margin_perc': margin_perc,
+            'offer_margin': offer_margin,
+            'offer_margin_perc': offer_margin_perc
         }
     
     def display_wbe_comparison(self):
@@ -361,13 +450,13 @@ class ProfittabilitaComparator:
             st.dataframe(df_filtered, use_container_width=True)
             
             # Top differences chart
-            top_diffs = df_filtered.nlargest(10, 'Cost Difference (€)', keep='all')
+            top_diffs = df_filtered.sort_values('Cost Difference (€)', ascending=False)
             if len(top_diffs) > 0:
                 fig = px.bar(
                     top_diffs,
                     x='Cost Difference (€)',
                     y='WBE',
-                    title='Top WBE Cost Differences',
+                    title='WBE Cost Differences',
                     orientation='h',
                     color='Cost Difference (€)',
                     color_continuous_scale='RdBu_r'

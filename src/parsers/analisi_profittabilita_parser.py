@@ -114,6 +114,16 @@ class ExcelColumns:
     TESORETTO = 80                   # TESORETTO
     MONTAGGIO_BEMA_MBE_US = 81       # MONTAGGIO BEMA MBE-US
 
+# VA21 Sheet Constants
+class VA21Columns:
+    WBE_BACKUP = 3                   # Column C - WBE codes (backup when Column D is None)
+    WBE = 4                          # Column D - WBE codes (primary)
+    OFFER_TOTAL = 25                 # Column Y - Offer totals
+
+class VA21Rows:
+    DATA_START_ROW = 18              # Data starts from row 18
+    HEADER_ROW = 18                  # Headers are in row 18
+
 # Excel Row Constants
 class ExcelRows:
     HEADER_ROW = 3
@@ -126,6 +136,9 @@ class IdentificationPatterns:
     GROUP_PREFIX = 'TXT'
     CATEGORY_CODE_LENGTH = 4
     HEADER_CODE = 'COD'
+    VA21_SHEET_PREFIX = 'VA21'       # Prefix for VA21 sheets
+    WBE_IT_SUFFIX = '-IT'            # Italian WBE suffix in NEW_OFFER1
+    WBE_US_SUFFIX = '-US'            # US WBE suffix in VA21 sheets
 
 # Project Information Cell Positions (row, column)
 class ProjectInfoCells:
@@ -173,6 +186,7 @@ class JsonFields:
     PRICELIST_SUBTOTAL = "pricelist_subtotal"
     COST_SUBTOTAL = "cost_subtotal"
     TOTAL_COST = "total_cost"
+    OFFER_PRICE = "offer_price"          # New field for VA21 offer price
     
     # Basic item fields
     POSITION = "position"
@@ -270,8 +284,11 @@ class JsonFields:
     SUBTOTAL = "subtotal"
     TOTAL_LISTINO = "total_listino"
     TOTAL_COSTO = "total_costo"
+    TOTAL_OFFER = "total_offer"         # New field for total offer price from VA21
     MARGIN = "margin"
     MARGIN_PERCENTAGE = "margin_percentage"
+    OFFER_MARGIN = "offer_margin"       # New field for margin vs offer price
+    OFFER_MARGIN_PERCENTAGE = "offer_margin_percentage"  # New field for offer margin %
 
 # Calculation Constants
 class CalculationConstants:
@@ -295,6 +312,38 @@ class ErrorMessages:
     INVALID_WORKBOOK = "Unable to load workbook: {}"
     MISSING_SHEET = "Sheet '{}' not found in workbook"
     INVALID_DATA_FORMAT = "Invalid data format in row {}"
+
+# VA21 to NEW_OFFER1 Column Mapping
+class VA21FieldMapping:
+    """Mapping from VA21 column names to NEW_OFFER1 JsonFields"""
+    MAPPINGS = {
+        # Common SAP/VA21 column names
+        'PO Item': JsonFields.POSITION,
+        'Material': JsonFields.CODE,
+        'Description': JsonFields.DESCRIPTION,
+        'Order Quantity': JsonFields.QTY,
+        'Net Value': JsonFields.PRICELIST_TOTAL,
+        'Unit Price': JsonFields.PRICELIST_UNIT_PRICE,
+        'WBE': JsonFields.WBE,
+        'Quantity': JsonFields.QTY,
+        'Item': JsonFields.POSITION,
+        'Material Description': JsonFields.DESCRIPTION,
+        'Short Text': JsonFields.DESCRIPTION,
+        'Plant': JsonFields.CODE,
+        'Vendor': JsonFields.CODE,
+        'Document Currency': JsonFields.CODE,
+        'Total Value': JsonFields.PRICELIST_TOTAL,
+        'Amount': JsonFields.PRICELIST_TOTAL,
+        'Price': JsonFields.PRICELIST_UNIT_PRICE,
+        'Unit': JsonFields.QTY,
+        # Add Italian column names if present
+        'Materiale': JsonFields.CODE,
+        'Descrizione': JsonFields.DESCRIPTION,
+        'Quantità': JsonFields.QTY,
+        'Prezzo': JsonFields.PRICELIST_UNIT_PRICE,
+        'Valore': JsonFields.PRICELIST_TOTAL,
+        # Add more mappings as needed based on actual VA21 headers
+    }
 
 # =============================================================================
 # MAIN PARSER CLASS
@@ -555,25 +604,34 @@ class AnalisiProfittabilitaParser:
         return product_groups
     
     def calculate_totals(self, product_groups: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Calculate total costs, revenues and margins"""
+        """Calculate total costs, revenues, offer prices and margins"""
         total_listino = CalculationConstants.DEFAULT_FLOAT
         total_costo = CalculationConstants.DEFAULT_FLOAT
+        total_offer = CalculationConstants.DEFAULT_FLOAT
         
-        # Sum up all costs and revenues from all categories
+        # Sum up all costs, revenues, and offers from all categories
         for group in product_groups:
             for category in group[JsonFields.CATEGORIES]:
                 total_listino += category.get(JsonFields.PRICELIST_SUBTOTAL, 0)
                 total_costo += category.get(JsonFields.COST_SUBTOTAL, 0)
+                total_offer += category.get(JsonFields.OFFER_PRICE, 0)
         
-        # Calculate margin
+        # Calculate margins using correct formula
         margin = total_listino - total_costo
         margin_percentage = (margin / total_listino * 100) if total_listino > 0 else 0
+        
+        # Calculate offer-based margins using correct formula: margin% = 1 - (cost / offer)
+        offer_margin = total_offer - total_costo
+        offer_margin_percentage = (1 - (total_costo / total_offer)) * 100 if total_offer > 0 else 0
         
         return {
             JsonFields.TOTAL_LISTINO: round(total_listino, 2),
             JsonFields.TOTAL_COSTO: round(total_costo, 2),
+            JsonFields.TOTAL_OFFER: round(total_offer, 2),
             JsonFields.MARGIN: round(margin, 2),
             JsonFields.MARGIN_PERCENTAGE: round(margin_percentage, 2),
+            JsonFields.OFFER_MARGIN: round(offer_margin, 2),
+            JsonFields.OFFER_MARGIN_PERCENTAGE: round(offer_margin_percentage, 2),
             JsonFields.EQUIPMENT_TOTAL: round(total_listino, 2),  # For compatibility
             JsonFields.INSTALLATION_TOTAL: CalculationConstants.DEFAULT_FLOAT,
             JsonFields.SUBTOTAL: round(total_listino, 2)
@@ -588,6 +646,11 @@ class AnalisiProfittabilitaParser:
         # Extract all sections
         project_info = self.extract_project_info()
         product_groups = self.extract_product_groups()
+        
+        # Integrate VA21 offer prices into categories
+        product_groups = self.integrate_va21_offers_into_categories(product_groups)
+        
+        # Calculate totals (including offer-based calculations)
         totals = self.calculate_totals(product_groups)
         
         # Build final structure
@@ -618,6 +681,519 @@ class AnalisiProfittabilitaParser:
         except (ValueError, TypeError):
             return default
 
+    def _find_latest_va21_sheet(self) -> Optional[str]:
+        """
+        Find the latest VA21 sheet in the workbook.
+        Sheets are named VA21, VA21_A01, VA21_A02, etc.
+        Returns the sheet name with the highest version number.
+        """
+        va21_sheets = [
+            sheet for sheet in self.workbook.sheetnames 
+            if sheet.startswith(IdentificationPatterns.VA21_SHEET_PREFIX)
+        ]
+        
+        if not va21_sheets:
+            logger.warning("No VA21 sheets found in workbook")
+            return None
+        
+        # Sort sheets to get the latest version
+        # VA21 comes before VA21_A01, VA21_A02, etc.
+        va21_sheets.sort()
+        latest_sheet = va21_sheets[-1]  # Last in sorted order should be latest version
+        
+        logger.info(f"Found VA21 sheets: {va21_sheets}, using latest: {latest_sheet}")
+        return latest_sheet
+
+    def _convert_wbe_us_to_it(self, wbe_us: str) -> str:
+        """
+        Convert US WBE code (ending in -US) to IT format (ending in -IT).
+        
+        Args:
+            wbe_us: WBE code in US format (e.g., 'CC2199-A-PCZZ01-US')
+            
+        Returns:
+            WBE code in IT format (e.g., 'CC2199-A-PCZZ01-IT')
+        """
+        if not wbe_us or not isinstance(wbe_us, str):
+            return ""
+        
+        wbe_clean = wbe_us.strip()
+        if wbe_clean.endswith(IdentificationPatterns.WBE_US_SUFFIX):
+            # Replace -US suffix with -IT
+            wbe_it = wbe_clean[:-len(IdentificationPatterns.WBE_US_SUFFIX)] + IdentificationPatterns.WBE_IT_SUFFIX
+            return wbe_it
+        
+        # If it doesn't end with -US, return as is
+        return wbe_clean
+
+    def extract_va21_offer_data(self) -> Dict[str, float]:
+        """
+        Extract offer prices from the latest VA21 sheet.
+        Sum all offer prices for the same WBE code to avoid duplicates.
+        
+        Returns:
+            Dictionary mapping WBE codes to total offer prices
+        """
+        latest_sheet = self._find_latest_va21_sheet()
+        if not latest_sheet:
+            logger.warning("No VA21 sheet found, offer prices will not be available")
+            return {}
+        
+        try:
+            va21_ws = self.workbook[latest_sheet]
+            wbe_offers = {}
+            processed_rows = 0
+            valid_offer_rows = 0
+            
+            logger.info(f"Extracting offer data from sheet '{latest_sheet}' (Column D for WBE, Column Y for offers)")
+            
+            # Extract WBE-Offer mappings starting from data row
+            for row in range(VA21Rows.DATA_START_ROW, va21_ws.max_row + 1):
+                processed_rows += 1
+                
+                # Use direct cell access for VA21 sheet (Column D primary, Column C backup for WBE)
+                wbe_cell = va21_ws.cell(row=row, column=VA21Columns.WBE)
+                wbe_backup_cell = va21_ws.cell(row=row, column=VA21Columns.WBE_BACKUP)
+                offer_cell = va21_ws.cell(row=row, column=VA21Columns.OFFER_TOTAL)
+                
+                wbe_val = wbe_cell.value
+                wbe_backup_val = wbe_backup_cell.value
+                offer_val = offer_cell.value
+                
+                # Log all rows for debugging (only first 10 and last 10 to avoid spam)
+                if processed_rows <= 10 or processed_rows > va21_ws.max_row - 10:
+                    if wbe_val or wbe_backup_val or offer_val:
+                        logger.debug(f"Row {row}: WBE_D='{wbe_val}', WBE_C='{wbe_backup_val}', Offer={offer_val}")
+                
+                # Determine which WBE to use
+                final_wbe = None
+                if wbe_val and str(wbe_val).strip() and str(wbe_val).strip() != 'None':
+                    # Use Column D (primary)
+                    final_wbe = str(wbe_val).strip()
+                elif wbe_backup_val and str(wbe_backup_val).strip() and str(wbe_backup_val).strip() != 'None':
+                    # Use Column C (backup) and convert -US to -IT if needed
+                    final_wbe = self._convert_wbe_us_to_it(str(wbe_backup_val).strip())
+                
+                # Only process rows with valid WBE and numeric offer values
+                if (final_wbe and 
+                    offer_val is not None and 
+                    isinstance(offer_val, (int, float))):
+                    
+                    offer_clean = float(offer_val)
+                    valid_offer_rows += 1
+                    
+                    # Sum offers for the same WBE (handle multiple entries for same WBE)
+                    if final_wbe not in wbe_offers:
+                        wbe_offers[final_wbe] = 0
+                        logger.debug(f"Row {row}: First occurrence of WBE '{final_wbe}': €{offer_clean:,.2f}")
+                    else:
+                        logger.debug(f"Row {row}: Additional entry for WBE '{final_wbe}': +€{offer_clean:,.2f} (previous: €{wbe_offers[final_wbe]:,.2f})")
+                    
+                    wbe_offers[final_wbe] += offer_clean
+                    logger.debug(f"Row {row}: WBE '{final_wbe}' total now: €{wbe_offers[final_wbe]:,.2f}")
+                    
+                elif (wbe_val or wbe_backup_val) and offer_val is not None:
+                    # Log cases where we have data but it's not being processed
+                    logger.debug(f"Row {row}: Skipping WBE_D='{wbe_val}', WBE_C='{wbe_backup_val}', Offer={offer_val} (invalid format)")
+            
+            logger.info(f"Processed {processed_rows} rows, found {valid_offer_rows} rows with valid offers")
+            logger.info(f"Successfully extracted {len(wbe_offers)} unique WBE codes with summed offers from VA21")
+            
+            # Log summary of extracted WBE offers
+            total_extracted_offer = sum(wbe_offers.values())
+            logger.info(f"Total offer value extracted: €{total_extracted_offer:,.2f}")
+            
+            # Log first few WBE mappings for debugging
+            wbe_items = list(wbe_offers.items())
+            for i, (wbe, offer) in enumerate(wbe_items[:5]):
+                logger.info(f"  WBE '{wbe}' -> €{offer:,.2f}")
+            if len(wbe_offers) > 5:
+                logger.info(f"  ... and {len(wbe_offers) - 5} more WBE codes")
+            
+            # Check for any WBEs that have multiple entries (were summed)
+            wbe_counts = {}
+            for row in range(VA21Rows.DATA_START_ROW, va21_ws.max_row + 1):
+                wbe_cell = va21_ws.cell(row=row, column=VA21Columns.WBE)
+                wbe_backup_cell = va21_ws.cell(row=row, column=VA21Columns.WBE_BACKUP)
+                offer_cell = va21_ws.cell(row=row, column=VA21Columns.OFFER_TOTAL)
+                
+                wbe_val = wbe_cell.value
+                wbe_backup_val = wbe_backup_cell.value
+                offer_val = offer_cell.value
+                
+                final_wbe = None
+                if wbe_val and str(wbe_val).strip() and str(wbe_val).strip() != 'None':
+                    final_wbe = str(wbe_val).strip()
+                elif wbe_backup_val and str(wbe_backup_val).strip() and str(wbe_backup_val).strip() != 'None':
+                    final_wbe = self._convert_wbe_us_to_it(str(wbe_backup_val).strip())
+                
+                if final_wbe and offer_val is not None and isinstance(offer_val, (int, float)):
+                    wbe_counts[final_wbe] = wbe_counts.get(final_wbe, 0) + 1
+            
+            # Log WBEs that appeared multiple times
+            duplicated_wbes = {wbe: count for wbe, count in wbe_counts.items() if count > 1}
+            if duplicated_wbes:
+                logger.info(f"Found {len(duplicated_wbes)} WBE codes with multiple entries (values were summed):")
+                for wbe, count in list(duplicated_wbes.items())[:5]:
+                    logger.info(f"  WBE '{wbe}': {count} entries, total €{wbe_offers[wbe]:,.2f}")
+                if len(duplicated_wbes) > 5:
+                    logger.info(f"  ... and {len(duplicated_wbes) - 5} more duplicated WBEs")
+            else:
+                logger.info("All WBE codes had unique entries (no duplication/summing needed)")
+            
+            return wbe_offers
+            
+        except Exception as e:
+            logger.error(f"Error extracting VA21 data from sheet '{latest_sheet}': {e}")
+            return {}
+
+    def integrate_va21_offers_into_categories(self, product_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Integrate VA21 offer prices into the parsed categories.
+        Merge VA21 data into existing WBE categories and only create new categories for truly unmapped WBEs.
+        
+        Args:
+            product_groups: List of product groups with categories
+            
+        Returns:
+            Updated product groups with offer prices and merged VA21 data
+        """
+        # Extract VA21 offer data
+        va21_offers = self.extract_va21_offer_data()
+        
+        if not va21_offers:
+            logger.warning("No VA21 offer data available, categories will not have offer prices")
+            return product_groups
+        
+        logger.info(f"Starting integration of VA21 offers into {sum(len(g.get('categories', [])) for g in product_groups)} categories")
+        
+        matched_offers = 0
+        total_matched_value = 0
+        existing_wbes = set()
+        merged_wbes = set()  # Track WBEs that have been merged with VA21 data
+        
+        # First pass: integrate offer prices into existing categories and merge VA21 data
+        for group in product_groups:
+            for category in group[JsonFields.CATEGORIES]:
+                category_wbe = category.get(JsonFields.WBE, "")
+                
+                if category_wbe:
+                    existing_wbes.add(category_wbe)
+                    
+                    # Look up offer price directly in VA21 data
+                    offer_price = va21_offers.get(category_wbe, 0.0)
+                    
+                    # Add offer price to category
+                    category[JsonFields.OFFER_PRICE] = offer_price
+                    
+                    if offer_price > 0:
+                        matched_offers += 1
+                        total_matched_value += offer_price
+                        merged_wbes.add(category_wbe)
+                        logger.info(f"✓ Matched category WBE '{category_wbe}' -> Offer: €{offer_price:,.2f}")
+                        
+                        # Merge VA21 data into existing category items if available
+                        self._merge_va21_data_into_category(category, category_wbe)
+                    else:
+                        logger.warning(f"✗ No offer price found for category WBE '{category_wbe}'")
+                else:
+                    # No WBE code, set offer price to 0
+                    category[JsonFields.OFFER_PRICE] = 0.0
+                    logger.debug("Category has no WBE code, setting offer price to 0")
+        
+        # Second pass: identify truly unmapped WBEs from VA21 (not merged in first pass)
+        unmapped_wbes = {wbe: offer for wbe, offer in va21_offers.items() 
+                        if wbe not in merged_wbes and wbe not in existing_wbes}
+        
+        if unmapped_wbes:
+            logger.info(f"Found {len(unmapped_wbes)} truly unmapped WBE codes in VA21, creating new categories")
+            
+            # Get VA21 worksheet and headers for data extraction
+            latest_sheet = self._find_latest_va21_sheet()
+            if latest_sheet:
+                va21_ws = self.workbook[latest_sheet]
+                headers = self.extract_va21_headers(va21_ws)
+                
+                # Create a new group for VA21-only categories
+                va21_group = {
+                    JsonFields.GROUP_ID: "TXT-VA21",
+                    JsonFields.GROUP_NAME: "Categories from VA21 (not in NEW_OFFER1)",
+                    JsonFields.QUANTITY: 1,
+                    JsonFields.CATEGORIES: []
+                }
+                
+                # Create categories for each truly unmapped WBE
+                for wbe_code, offer_price in unmapped_wbes.items():
+                    try:
+                        new_category = self.create_category_from_va21_wbe(wbe_code, offer_price, va21_ws, headers)
+                        va21_group[JsonFields.CATEGORIES].append(new_category)
+                        matched_offers += 1
+                        total_matched_value += offer_price
+                        logger.info(f"✓ Created new category for unmapped WBE '{wbe_code}' -> Offer: €{offer_price:,.2f}")
+                    except Exception as e:
+                        logger.error(f"Failed to create category for WBE '{wbe_code}': {e}")
+                
+                # Add the VA21 group if it has categories
+                if va21_group[JsonFields.CATEGORIES]:
+                    product_groups.append(va21_group)
+                    logger.info(f"Added new group 'TXT-VA21' with {len(va21_group[JsonFields.CATEGORIES])} categories from VA21")
+        else:
+            logger.info("All VA21 WBE codes were successfully merged into existing categories")
+        
+        # Verify total offer prices match
+        final_total_offers = sum(va21_offers.values())
+        logger.info(f"Integration completed: {matched_offers} total categories with total value €{total_matched_value:,.2f}")
+        logger.info(f"VA21 total: €{final_total_offers:,.2f}, Integrated total: €{total_matched_value:,.2f}")
+        logger.info(f"Merged into existing: {len(merged_wbes)}, New categories: {len(unmapped_wbes)}")
+        
+        if abs(final_total_offers - total_matched_value) > 0.01:  # Allow for small rounding differences
+            logger.warning(f"Total mismatch: VA21 total €{final_total_offers:,.2f} != Integrated total €{total_matched_value:,.2f}")
+        else:
+            logger.info("✓ Total offer prices match between VA21 and integrated categories")
+        
+        return product_groups
+
+    def _merge_va21_data_into_category(self, category: Dict[str, Any], wbe_code: str):
+        """
+        Merge additional VA21 data into an existing category from NEW_OFFER1.
+        
+        Args:
+            category: Existing category dictionary to enhance
+            wbe_code: WBE code to look up in VA21
+        """
+        try:
+            latest_sheet = self._find_latest_va21_sheet()
+            if not latest_sheet:
+                return
+            
+            va21_ws = self.workbook[latest_sheet]
+            headers = self.extract_va21_headers(va21_ws)
+            
+            # Find VA21 rows for this WBE and extract additional data
+            va21_items = []
+            for row in range(VA21Rows.DATA_START_ROW, va21_ws.max_row + 1):
+                # Check both Column D and Column C for WBE
+                wbe_cell_d = va21_ws.cell(row=row, column=VA21Columns.WBE)
+                wbe_cell_c = va21_ws.cell(row=row, column=VA21Columns.WBE_BACKUP)
+                
+                wbe_val_d = wbe_cell_d.value
+                wbe_val_c = wbe_cell_c.value
+                
+                # Determine WBE for this row
+                row_wbe = None
+                if wbe_val_d and str(wbe_val_d).strip() and str(wbe_val_d).strip() != 'None':
+                    row_wbe = str(wbe_val_d).strip()
+                elif wbe_val_c and str(wbe_val_c).strip() and str(wbe_val_c).strip() != 'None':
+                    row_wbe = self._convert_wbe_us_to_it(str(wbe_val_c).strip())
+                
+                if row_wbe == wbe_code:
+                    # Extract item data from this VA21 row
+                    item_data = self.extract_va21_row_data(va21_ws, row, headers)
+                    if item_data.get(JsonFields.DESCRIPTION):  # Only add if has description
+                        # Mark this as VA21 source data
+                        item_data['va21_source'] = True
+                        item_data[JsonFields.POSITION] = f"VA21-{row}"
+                        va21_items.append(item_data)
+            
+            # Add VA21 items to the existing category
+            if va21_items:
+                category[JsonFields.ITEMS].extend(va21_items)
+                logger.debug(f"Merged {len(va21_items)} VA21 items into existing category '{wbe_code}'")
+                
+                # Recalculate category totals to include VA21 data
+                total_listino = sum(item.get(JsonFields.PRICELIST_TOTAL, 0) for item in category[JsonFields.ITEMS])
+                total_cost = sum(item.get(JsonFields.TOTAL_COST, 0) for item in category[JsonFields.ITEMS])
+                
+                # Update category totals (but preserve original subtotals from NEW_OFFER1)
+                category['total_listino_with_va21'] = total_listino
+                category['total_cost_with_va21'] = total_cost
+                
+        except Exception as e:
+            logger.warning(f"Failed to merge VA21 data for WBE '{wbe_code}': {e}")
+
+    def extract_va21_headers(self, va21_ws) -> Dict[int, str]:
+        """
+        Extract column headers from VA21 sheet row 18.
+        
+        Args:
+            va21_ws: VA21 worksheet
+            
+        Returns:
+            Dictionary mapping column index to header name
+        """
+        headers = {}
+        header_row = VA21Rows.HEADER_ROW
+        
+        # Extract headers starting from column A
+        for col in range(1, va21_ws.max_column + 1):
+            cell = va21_ws.cell(row=header_row, column=col)
+            if cell.value and isinstance(cell.value, str):
+                header_name = cell.value.strip()
+                if header_name:
+                    headers[col] = header_name
+        
+        logger.info(f"Extracted {len(headers)} headers from VA21 row {header_row}")
+        return headers
+
+    def extract_va21_row_data(self, va21_ws, row: int, headers: Dict[int, str]) -> Dict[str, Any]:
+        """
+        Extract data from a VA21 row and map it to NEW_OFFER1 fields.
+        
+        Args:
+            va21_ws: VA21 worksheet
+            row: Row number to extract
+            headers: Column headers mapping
+            
+        Returns:
+            Dictionary with mapped field data
+        """
+        row_data = {}
+        
+        # Extract raw data from VA21 row
+        for col, header_name in headers.items():
+            cell = va21_ws.cell(row=row, column=col)
+            
+            # Map VA21 field to NEW_OFFER1 field if mapping exists
+            if header_name in VA21FieldMapping.MAPPINGS:
+                new_offer_field = VA21FieldMapping.MAPPINGS[header_name]
+                
+                # Convert cell value based on field type
+                if cell.value is not None:
+                    if new_offer_field in [JsonFields.QTY, JsonFields.PRICELIST_TOTAL, JsonFields.PRICELIST_UNIT_PRICE]:
+                        # Numeric fields
+                        row_data[new_offer_field] = self._safe_float(cell.value)
+                    else:
+                        # Text fields
+                        row_data[new_offer_field] = str(cell.value).strip()
+        
+        # Set default values for missing fields
+        row_data.setdefault(JsonFields.POSITION, str(row))
+        row_data.setdefault(JsonFields.QTY, 1.0)
+        row_data.setdefault(JsonFields.PRICELIST_TOTAL, 0.0)
+        row_data.setdefault(JsonFields.PRICELIST_UNIT_PRICE, 0.0)
+        row_data.setdefault(JsonFields.UNIT_COST, 0.0)
+        row_data.setdefault(JsonFields.TOTAL_COST, 0.0)
+        
+        # Set all other fields to default values
+        for field_name in [JsonFields.COD_LISTINO, JsonFields.INTERNAL_CODE, JsonFields.PRIORITY_ORDER,
+                          JsonFields.PRIORITY, JsonFields.LINE_NUMBER, JsonFields.WBS, JsonFields.TOTAL]:
+            row_data.setdefault(field_name, "")
+        
+        # Set all numeric fields to 0
+        numeric_fields = [
+            JsonFields.MAT, JsonFields.UTM_ROBOT, JsonFields.UTM_ROBOT_H, JsonFields.UTM_LGV, JsonFields.UTM_LGV_H,
+            JsonFields.UTM_INTRA, JsonFields.UTM_INTRA_H, JsonFields.UTM_LAYOUT, JsonFields.UTM_LAYOUT_H,
+            JsonFields.UTE, JsonFields.UTE_H, JsonFields.BA, JsonFields.BA_H, JsonFields.SW_PC, JsonFields.SW_PC_H,
+            JsonFields.SW_PLC, JsonFields.SW_PLC_H, JsonFields.SW_LGV, JsonFields.SW_LGV_H,
+            JsonFields.MTG_MEC, JsonFields.MTG_MEC_H, JsonFields.MTG_MEC_INTRA, JsonFields.MTG_MEC_INTRA_H,
+            JsonFields.CAB_ELE, JsonFields.CAB_ELE_H, JsonFields.CAB_ELE_INTRA, JsonFields.CAB_ELE_INTRA_H,
+            JsonFields.COLL_BA, JsonFields.COLL_BA_H, JsonFields.COLL_PC, JsonFields.COLL_PC_H,
+            JsonFields.COLL_PLC, JsonFields.COLL_PLC_H, JsonFields.COLL_LGV, JsonFields.COLL_LGV_H,
+            JsonFields.PM_COST, JsonFields.PM_H, JsonFields.SPESE_PM, JsonFields.DOCUMENT, JsonFields.DOCUMENT_H,
+            JsonFields.IMBALLO, JsonFields.STOCCAGGIO, JsonFields.TRASPORTO, JsonFields.SITE, JsonFields.SITE_H,
+            JsonFields.INSTALL, JsonFields.INSTALL_H, JsonFields.AV_PC, JsonFields.AV_PC_H,
+            JsonFields.AV_PLC, JsonFields.AV_PLC_H, JsonFields.AV_LGV, JsonFields.AV_LGV_H,
+            JsonFields.SPESE_FIELD, JsonFields.SPESE_VARIE, JsonFields.AFTER_SALES,
+            JsonFields.PROVVIGIONI_ITALIA, JsonFields.PROVVIGIONI_ESTERO, JsonFields.TESORETTO,
+            JsonFields.MONTAGGIO_BEMA_MBE_US
+        ]
+        
+        for field in numeric_fields:
+            row_data.setdefault(field, 0.0)
+        
+        return row_data
+
+    def create_category_from_va21_wbe(self, wbe_code: str, offer_price: float, va21_ws, headers: Dict[int, str]) -> Dict[str, Any]:
+        """
+        Create a category from VA21 data for a WBE that doesn't exist in NEW_OFFER1.
+        
+        Args:
+            wbe_code: WBE code to create category for
+            offer_price: Total offer price for this WBE
+            va21_ws: VA21 worksheet
+            headers: Column headers mapping
+            
+        Returns:
+            Dictionary representing the new category
+        """
+        # Find all rows in VA21 that belong to this WBE
+        wbe_rows = []
+        items = []
+        
+        for row in range(VA21Rows.DATA_START_ROW, va21_ws.max_row + 1):
+            # Check both Column D and Column C for WBE
+            wbe_cell_d = va21_ws.cell(row=row, column=VA21Columns.WBE)
+            wbe_cell_c = va21_ws.cell(row=row, column=VA21Columns.WBE_BACKUP)
+            
+            wbe_val_d = wbe_cell_d.value
+            wbe_val_c = wbe_cell_c.value
+            
+            # Determine WBE for this row
+            row_wbe = None
+            if wbe_val_d and str(wbe_val_d).strip() and str(wbe_val_d).strip() != 'None':
+                row_wbe = str(wbe_val_d).strip()
+            elif wbe_val_c and str(wbe_val_c).strip() and str(wbe_val_c).strip() != 'None':
+                row_wbe = self._convert_wbe_us_to_it(str(wbe_val_c).strip())
+            
+            if row_wbe == wbe_code:
+                wbe_rows.append(row)
+                
+                # Extract item data from this row
+                item_data = self.extract_va21_row_data(va21_ws, row, headers)
+                if item_data.get(JsonFields.DESCRIPTION):  # Only add if has description
+                    items.append(item_data)
+        
+        # If no items found, create a dummy item
+        if not items:
+            items = [{
+                JsonFields.POSITION: "1",
+                JsonFields.CODE: wbe_code,
+                JsonFields.COD_LISTINO: "",
+                JsonFields.DESCRIPTION: f"Item from VA21 for WBE {wbe_code}",
+                JsonFields.QTY: 1.0,
+                JsonFields.PRICELIST_UNIT_PRICE: offer_price,
+                JsonFields.PRICELIST_TOTAL: offer_price,
+                JsonFields.UNIT_COST: 0.0,
+                JsonFields.TOTAL_COST: 0.0,
+                **{field: 0.0 for field in [
+                    JsonFields.MAT, JsonFields.UTM_ROBOT, JsonFields.UTM_ROBOT_H, JsonFields.UTM_LGV, JsonFields.UTM_LGV_H,
+                    JsonFields.UTM_INTRA, JsonFields.UTM_INTRA_H, JsonFields.UTM_LAYOUT, JsonFields.UTM_LAYOUT_H,
+                    JsonFields.UTE, JsonFields.UTE_H, JsonFields.BA, JsonFields.BA_H, JsonFields.SW_PC, JsonFields.SW_PC_H,
+                    JsonFields.SW_PLC, JsonFields.SW_PLC_H, JsonFields.SW_LGV, JsonFields.SW_LGV_H,
+                    JsonFields.MTG_MEC, JsonFields.MTG_MEC_H, JsonFields.MTG_MEC_INTRA, JsonFields.MTG_MEC_INTRA_H,
+                    JsonFields.CAB_ELE, JsonFields.CAB_ELE_H, JsonFields.CAB_ELE_INTRA, JsonFields.CAB_ELE_INTRA_H,
+                    JsonFields.COLL_BA, JsonFields.COLL_BA_H, JsonFields.COLL_PC, JsonFields.COLL_PC_H,
+                    JsonFields.COLL_PLC, JsonFields.COLL_PLC_H, JsonFields.COLL_LGV, JsonFields.COLL_LGV_H,
+                    JsonFields.PM_COST, JsonFields.PM_H, JsonFields.SPESE_PM, JsonFields.DOCUMENT, JsonFields.DOCUMENT_H,
+                    JsonFields.IMBALLO, JsonFields.STOCCAGGIO, JsonFields.TRASPORTO, JsonFields.SITE, JsonFields.SITE_H,
+                    JsonFields.INSTALL, JsonFields.INSTALL_H, JsonFields.AV_PC, JsonFields.AV_PC_H,
+                    JsonFields.AV_PLC, JsonFields.AV_PLC_H, JsonFields.AV_LGV, JsonFields.AV_LGV_H,
+                    JsonFields.SPESE_FIELD, JsonFields.SPESE_VARIE, JsonFields.AFTER_SALES,
+                    JsonFields.PROVVIGIONI_ITALIA, JsonFields.PROVVIGIONI_ESTERO, JsonFields.TESORETTO,
+                    JsonFields.MONTAGGIO_BEMA_MBE_US
+                ]}
+            }]
+        
+        # Calculate category totals
+        total_listino = sum(item.get(JsonFields.PRICELIST_TOTAL, 0) for item in items)
+        total_cost = sum(item.get(JsonFields.TOTAL_COST, 0) for item in items)
+        
+        # Create category
+        category = {
+            JsonFields.CATEGORY_ID: wbe_code.split('-')[-2] if '-' in wbe_code else wbe_code[:4],  # Extract category from WBE
+            JsonFields.CATEGORY_CODE: wbe_code,
+            JsonFields.CATEGORY_NAME: f"Category from VA21 - {wbe_code}",
+            JsonFields.WBE: wbe_code,
+            JsonFields.PRICELIST_SUBTOTAL: total_listino,
+            JsonFields.COST_SUBTOTAL: total_cost,
+            JsonFields.TOTAL_COST: total_cost,
+            JsonFields.OFFER_PRICE: offer_price,
+            JsonFields.ITEMS: items
+        }
+        
+        logger.info(f"Created new category for VA21 WBE '{wbe_code}' with {len(items)} items and offer €{offer_price:,.2f}")
+        return category
+
 def parse_analisi_profittabilita_to_json(file_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Main function to parse Analisi Profittabilita Excel file and optionally save to JSON
@@ -642,31 +1218,70 @@ def parse_analisi_profittabilita_to_json(file_path: str, output_path: Optional[s
 
 if __name__ == "__main__":
     # Example usage
-    input_file = "input/cc2199_analisi_profittabilita_new_offer1.xlsx"
-    output_file = "output/analisi_profittabilita_complete.json"
+    input_file = r"input\TEST_Analisi profitabilita'_Tabella riassuntiva SAP_PEPSICO INC - Copia.xlsm"
+    output_file = "output/analisi_profittabilita_with_va21_offers.json"
     
     try:
         result = parse_analisi_profittabilita_to_json(input_file, output_file)
-        print("Parsing completed successfully!")
+        print("=" * 80)
+        print("ANALISI PROFITTABILITÀ - RESULTS WITH VA21 OFFER INTEGRATION")
+        print("=" * 80)
         print(f"Project ID: {result['project']['id']}")
         print(f"Listino: {result['project']['listino']}")
         print(f"Number of product groups: {len(result['product_groups'])}")
-        print(f"Total Listino: {result['totals']['total_listino']}")
-        print(f"Total Costo: {result['totals']['total_costo']}")
-        print(f"Margin: {result['totals']['margin']} ({result['totals']['margin_percentage']}%)")
+        print()
         
-        # Show sample of additional fields
-        if result['product_groups']:
-            first_group = result['product_groups'][0]
-            if first_group['categories']:
-                first_category = first_group['categories'][0]
-                if first_category['items']:
-                    sample_item = first_category['items'][0]
-                    print(f"\nSample additional fields from first item:")
-                    print(f"  UTM Robot: {sample_item.get('utm_robot', 0)}")
-                    print(f"  PM Cost: {sample_item.get('pm_cost', 0)}")
-                    print(f"  Install: {sample_item.get('install', 0)}")
-                    print(f"  After Sales: {sample_item.get('after_sales', 0)}")
+        # Financial Summary
+        totals = result['totals']
+        print("FINANCIAL SUMMARY:")
+        print("-" * 40)
+        print(f"Total Listino:        €{totals['total_listino']:>15,.2f}")
+        print(f"Total Cost:           €{totals['total_costo']:>15,.2f}")
+        print(f"Total Offer:          €{totals['total_offer']:>15,.2f}")
+        print()
+        print(f"Listino Margin:       €{totals['margin']:>15,.2f} ({totals['margin_percentage']:>6.2f}%)")
+        print(f"Offer Margin:         €{totals['offer_margin']:>15,.2f} ({totals['offer_margin_percentage']:>6.2f}%)")
+        print()
+        
+        # Show categories with offer prices and margins
+        print("CATEGORIES WITH VA21 OFFER PRICES:")
+        print("-" * 80)
+        categories_with_offers = []
+        
+        for group in result['product_groups']:
+            for category in group['categories']:
+                offer_price = category.get('offer_price', 0)
+                if offer_price > 0:
+                    cost = category.get('cost_subtotal', 0)
+                    # Calculate margin using corrected formula: margin% = 1 - (cost / offer)
+                    margin_amount = offer_price - cost
+                    margin_pct = (1 - (cost / offer_price)) * 100 if offer_price > 0 else 0
+                    
+                    categories_with_offers.append({
+                        'wbe': category.get('wbe', 'N/A'),
+                        'name': category.get('category_name', 'N/A'),
+                        'offer_price': offer_price,
+                        'cost': cost,
+                        'margin_amount': margin_amount,
+                        'margin_pct': margin_pct
+                    })
+        
+        if categories_with_offers:
+            for i, cat in enumerate(categories_with_offers[:5], 1):  # Show first 5
+                print(f"{i:2d}. {cat['name']}")
+                print(f"    WBE:          {cat['wbe']}")
+                print(f"    Offer Price:  €{cat['offer_price']:>12,.2f}")
+                print(f"    Cost:         €{cat['cost']:>12,.2f}")
+                print(f"    Margin:       €{cat['margin_amount']:>12,.2f} ({cat['margin_pct']:>6.2f}%)")
+                print()
+            
+            if len(categories_with_offers) > 5:
+                print(f"... and {len(categories_with_offers) - 5} more categories with offer prices")
+        else:
+            print("No categories with offer prices found")
+        
+        print("=" * 80)
+        print(f"Results saved to: {output_file}")
         
     except Exception as e:
         logger.error(f"Error parsing Excel file: {e}")

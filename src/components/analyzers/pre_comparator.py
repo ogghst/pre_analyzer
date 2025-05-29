@@ -328,15 +328,18 @@ class PreComparator:
         
         # Visualization of differences
         if len(comparison_data) > 0:
+            # Create concatenated labels for x-axis
+            df_comparison['Group Label'] = df_comparison[DisplayFields.GROUP_ID] + ' - ' + df_comparison[DisplayFields.GROUP_NAME].str[:20]
+            
             fig = px.bar(
                 df_comparison,
-                x=DisplayFields.GROUP_ID,
+                x='Group Label',
                 y='Value Difference (€)',
                 title='Group Value Differences (File 2 - File 1)',
                 color='Value Difference (€)',
                 color_continuous_scale='RdBu_r'
             )
-            fig.update_layout(height=400)
+            fig.update_layout(height=400, xaxis_tickangle=-45)  # Added angle for better readability
             st.plotly_chart(fig, use_container_width=True)
     
     def display_categories_comparison(self):

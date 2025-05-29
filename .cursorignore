@@ -1,1 +1,14 @@
 # Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+.venv/
+input/
+output/
+build/
+db/
+dist/
+.vscode/
+.cursor/
+__pycache__/
+temp/
+test/
+test_data/
+

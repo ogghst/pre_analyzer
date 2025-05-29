@@ -55,27 +55,56 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             st.metric("Total Items", total_items)
             
         with col4:
-            margin_perc = self.totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
-            st.metric("Margin %", f"{margin_perc:.2f}%")
+            # Show offer margin percentage if available, otherwise listino margin
+            total_offer = self.totals.get(JsonFields.TOTAL_OFFER, 0)
+            if total_offer > 0:
+                offer_margin_perc = self.totals.get(JsonFields.OFFER_MARGIN_PERCENTAGE, 0)
+                st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%")
+            else:
+                margin_perc = self.totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
+                st.metric("Listino Margin %", f"{margin_perc:.2f}%")
             # Count items with data
             items_with_data = self._count_items_with_data()
             st.metric("Items with Data", items_with_data)
         
-        # Financial summary
+        # Financial summary - enhanced with VA21 offer prices
         st.subheader("💰 Profitability Summary")
-        fin_col1, fin_col2, fin_col3, fin_col4 = st.columns(4)
+        
+        # Determine layout based on whether we have offer data
+        total_offer = self.totals.get(JsonFields.TOTAL_OFFER, 0)
+        
+        if total_offer > 0:
+            # Show extended layout with offer data
+            fin_col1, fin_col2, fin_col3, fin_col4, fin_col5 = st.columns(5)
+            
+            with fin_col1:
+                st.metric("Total Listino", f"€{self.totals.get(JsonFields.TOTAL_LISTINO, 0):,.2f}")
+            with fin_col2:
+                st.metric("Total Cost", f"€{self.totals.get(JsonFields.TOTAL_COSTO, 0):,.2f}")
+            with fin_col3:
+                st.metric("Total Offer (VA21)", f"€{total_offer:,.2f}")
+            with fin_col4:
+                offer_margin = self.totals.get(JsonFields.OFFER_MARGIN, 0)
+                st.metric("Offer Margin", f"€{offer_margin:,.2f}")
+            with fin_col5:
+                offer_margin_perc = self.totals.get(JsonFields.OFFER_MARGIN_PERCENTAGE, 0)
+                delta_color = "normal" if offer_margin_perc > 20 else "inverse"
+                st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%", delta=f"{offer_margin_perc - 20:.1f}%")
+        else:
+            # Show basic layout without offer data
+            fin_col1, fin_col2, fin_col3, fin_col4 = st.columns(4)
         
         with fin_col1:
             st.metric("Total Listino", f"€{self.totals.get(JsonFields.TOTAL_LISTINO, 0):,.2f}")
         with fin_col2:
-            st.metric("Total Costo", f"€{self.totals.get(JsonFields.TOTAL_COSTO, 0):,.2f}")
+                st.metric("Total Cost", f"€{self.totals.get(JsonFields.TOTAL_COSTO, 0):,.2f}")
         with fin_col3:
             margin = self.totals.get(JsonFields.MARGIN, 0)
-            st.metric("Margin", f"€{margin:,.2f}")
+            st.metric("Listino Margin", f"€{margin:,.2f}")
         with fin_col4:
             margin_perc = self.totals.get(JsonFields.MARGIN_PERCENTAGE, 0)
             delta_color = "normal" if margin_perc > 20 else "inverse"
-            st.metric("Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
+            st.metric("Listino Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
     
     def display_profitability_analysis(self):
         """Display comprehensive profitability analysis"""
@@ -85,15 +114,30 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         col1, col2 = st.columns(2)
         
         with col1:
-            # Profitability pie chart
-            profit_data = {
-                DisplayFields.CATEGORY_NAME: ['Total Costo', 'Margin'],
-                'Amount (€)': [
-                    self.totals.get(JsonFields.TOTAL_COSTO, 0),
-                    self.totals.get(JsonFields.MARGIN, 0)
-                ],
-                'Color': ['#ff6b6b', '#51cf66']
-            }
+            # Profitability pie chart - use offer-based margin when available
+            total_offer = self.totals.get(JsonFields.TOTAL_OFFER, 0)
+            total_costo = self.totals.get(JsonFields.TOTAL_COSTO, 0)
+            
+            if total_offer > 0:
+                # Use offer-based margin
+                offer_margin = total_offer - total_costo
+                profit_data = {
+                    DisplayFields.CATEGORY_NAME: ['Total Costo', 'Offer Margin'],
+                    'Amount (€)': [total_costo, offer_margin],
+                    'Color': ['#ff6b6b', '#51cf66']
+                }
+                title = 'Cost vs Offer Margin Distribution'
+                color_map = {'Total Costo': '#ff6b6b', 'Offer Margin': '#51cf66'}
+            else:
+                # Fall back to listino-based margin
+                listino_margin = self.totals.get(JsonFields.MARGIN, 0)
+                profit_data = {
+                    DisplayFields.CATEGORY_NAME: ['Total Costo', 'Listino Margin'],
+                    'Amount (€)': [total_costo, listino_margin],
+                    'Color': ['#ff6b6b', '#51cf66']
+                }
+                title = 'Cost vs Listino Margin Distribution'
+                color_map = {'Total Costo': '#ff6b6b', 'Listino Margin': '#51cf66'}
             
             df_profit = pd.DataFrame(profit_data)
             
@@ -101,9 +145,9 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                 df_profit,
                 values='Amount (€)',
                 names=DisplayFields.CATEGORY_NAME,
-                title='Cost vs Margin Distribution',
+                title=title,
                 color=DisplayFields.CATEGORY_NAME,
-                color_discrete_map={'Total Costo': '#ff6b6b', 'Margin': '#51cf66'}
+                color_discrete_map=color_map
             )
             fig_pie.update_layout(height=500)
             st.plotly_chart(fig_pie, use_container_width=True)
@@ -136,42 +180,148 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             fig_gauge.update_layout(height=500)
             st.plotly_chart(fig_gauge, use_container_width=True)
         
-        # Group-level profitability analysis
-        st.subheader("📊 Profitability by Group")
+        # WBE-level profitability analysis
+        st.subheader("📊 Profitability by WBE")
         
-        group_profit_data = []
+        # Collect WBE-level data
+        wbe_data = []
         for group in self.product_groups:
-            group_listino = sum(cat.get(JsonFields.PRICELIST_SUBTOTAL, 0) for cat in group.get(JsonFields.CATEGORIES, []))
-            group_costo = sum(cat.get(JsonFields.COST_SUBTOTAL, 0) for cat in group.get(JsonFields.CATEGORIES, []))
-            group_margin = group_listino - group_costo
-            group_margin_perc = (group_margin / group_listino * 100) if group_listino > 0 else 0
-            
-            group_profit_data.append({
-                DisplayFields.GROUP_ID: group.get(JsonFields.GROUP_ID, 'Unknown'),
-                DisplayFields.GROUP_NAME: self._truncate_text(group.get(JsonFields.GROUP_NAME, 'Unnamed'), 25),
-                DisplayFields.LISTINO_EUR: group_listino,
-                DisplayFields.COSTO_EUR: group_costo,
-                DisplayFields.MARGIN_EUR: group_margin,
-                DisplayFields.MARGIN_PERCENT: group_margin_perc
-            })
+            for category in group.get(JsonFields.CATEGORIES, []):
+                wbe_code = category.get(JsonFields.WBE, 'Unknown')
+                listino_price = category.get(JsonFields.PRICELIST_SUBTOTAL, 0)
+                offer_price = category.get(JsonFields.OFFER_PRICE, 0)
+                cost = category.get(JsonFields.COST_SUBTOTAL, 0)
+                
+                # Calculate margin - only use offer price, no fallback to listino
+                if offer_price > 0:
+                    # Use offer price for margin calculation
+                    margin_amount = offer_price - cost
+                    margin_percentage = (1 - (cost / offer_price)) * 100 if offer_price > 0 else 0
+                else:
+                    # No offer price available - set margin to None/0
+                    margin_amount = 0
+                    margin_percentage = 0
+                
+                wbe_data.append({
+                    'WBE': wbe_code,
+                    'Listino (€)': listino_price,
+                    'Offer (€)': offer_price if offer_price > 0 else None,
+                    'Cost (€)': cost,
+                    'Margin (€)': margin_amount if offer_price > 0 else None,
+                    'Margin (%)': margin_percentage if offer_price > 0 else None
+                })
         
-        df_group_profit = pd.DataFrame(group_profit_data)
+        df_wbe = pd.DataFrame(wbe_data)
         
-        if not df_group_profit.empty:
-            # Stacked bar chart for profitability by group
-            fig_stacked = px.bar(
-                df_group_profit,
-                x=DisplayFields.GROUP_ID,
-                y=[DisplayFields.COSTO_EUR, DisplayFields.MARGIN_EUR],
-                title='Cost vs Margin by Group',
-                barmode='stack',
-                color_discrete_map={DisplayFields.COSTO_EUR: '#ff6b6b', DisplayFields.MARGIN_EUR: '#51cf66'}
-            )
-            fig_stacked.update_layout(height=600)
-            st.plotly_chart(fig_stacked, use_container_width=True)
+        if not df_wbe.empty:
+            # Sort by margin amount descending for better visualization
+            df_wbe_sorted = df_wbe.sort_values('Margin (€)', ascending=False)
             
-            # Profitability table
-            st.dataframe(df_group_profit, use_container_width=True)
+            # 1. WBE Profitability Table
+            st.subheader("📋 WBE Profitability Table")
+            
+            # Format the dataframe for display
+            df_display = df_wbe_sorted.copy()
+            for col in ['Listino (€)', 'Offer (€)', 'Cost (€)', 'Margin (€)']:
+                if col in df_display.columns:
+                    df_display[col] = df_display[col].apply(lambda x: f"€{x:,.2f}" if pd.notna(x) and x != 0 else "-")
+            df_display['Margin (%)'] = df_display['Margin (%)'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+            
+            st.dataframe(df_display, use_container_width=True)
+            
+            # 2. Bar Chart: Offer Price vs Cost by WBE
+            st.subheader("📊 Offer Price vs Cost by WBE")
+            
+            # Filter out WBEs without offer prices for this chart
+            df_with_offers = df_wbe_sorted[df_wbe_sorted['Offer (€)'].notna() & (df_wbe_sorted['Offer (€)'] > 0)].copy()
+            
+            if not df_with_offers.empty:
+                fig_bar = go.Figure()
+                
+                fig_bar.add_trace(go.Bar(
+                    name='Offer Price',
+                    x=df_with_offers['WBE'],
+                    y=df_with_offers['Offer (€)'],
+                    marker_color='#3498db',
+                    text=df_with_offers['Offer (€)'].apply(lambda x: f"€{x:,.0f}"),
+                    textposition='outside'
+                ))
+                
+                fig_bar.add_trace(go.Bar(
+                    name='Cost',
+                    x=df_with_offers['WBE'],
+                    y=df_with_offers['Cost (€)'],
+                    marker_color='#e74c3c',
+                    text=df_with_offers['Cost (€)'].apply(lambda x: f"€{x:,.0f}"),
+                    textposition='outside'
+                ))
+                
+                fig_bar.update_layout(
+                    title='Offer Price vs Cost by WBE',
+                    xaxis_title='WBE Code',
+                    yaxis_title='Amount (€)',
+                    barmode='group',
+                    height=600,
+                    xaxis={'tickangle': 45}
+                )
+                
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("No WBEs with offer prices available for comparison chart.")
+            
+            # 3. Pie Chart: Margin Distribution by WBE
+            st.subheader("🥧 Margin Distribution by WBE")
+            
+            # Filter WBEs with positive margins AND offer prices, sort by WBE name
+            df_positive_margin = df_wbe[
+                (df_wbe['Margin (€)'].notna()) & 
+                (df_wbe['Margin (€)'] > 0) &
+                (df_wbe['Offer (€)'].notna())
+            ].copy().sort_values('WBE')
+            
+            if not df_positive_margin.empty:
+                fig_margin_pie = px.pie(
+                    df_positive_margin,
+                    values='Margin (€)',
+                    names='WBE',
+                    title='Margin Distribution by WBE (Sorted by WBE Name - Offer-based only)',
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                fig_margin_pie.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    hovertemplate='<b>%{label}</b><br>Margin: €%{value:,.2f}<br>Percentage: %{percent}<extra></extra>'
+                )
+                fig_margin_pie.update_layout(height=600)
+                st.plotly_chart(fig_margin_pie, use_container_width=True)
+            else:
+                st.warning("No WBEs with positive offer-based margins found.")
+            
+            # 4. Pie Chart: Cost Distribution by WBE
+            st.subheader("🥧 Cost Distribution by WBE")
+            
+            # Filter WBEs with costs and sort by WBE name instead of cost
+            df_with_costs = df_wbe[df_wbe['Cost (€)'] > 0].copy().sort_values('WBE')
+            
+            if not df_with_costs.empty:
+                fig_cost_pie = px.pie(
+                    df_with_costs,
+                    values='Cost (€)',
+                    names='WBE',
+                    title='Cost Distribution by WBE (Sorted by WBE Name)',
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_cost_pie.update_traces(
+                    textposition='inside',
+                    textinfo='percent+label',
+                    hovertemplate='<b>%{label}</b><br>Cost: €%{value:,.2f}<br>Percentage: %{percent}<extra></extra>'
+                )
+                fig_cost_pie.update_layout(height=600)
+                st.plotly_chart(fig_cost_pie, use_container_width=True)
+            else:
+                st.warning("No WBEs with costs found.")
+        else:
+            st.warning("No WBE data available for profitability analysis.")
     
     def display_utm_analysis(self):
         """Display UTM (time tracking) analysis"""
@@ -322,6 +472,7 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                             JsonFields.CATEGORIES: [],
                             'total_listino': 0,
                             'total_costo': 0,
+                            'total_offer': 0,
                             JsonFields.ITEMS: []
                         }
                         wbe_categories[wbe] = []
@@ -335,12 +486,14 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                         'category': category
                     })
                     
-                    # Aggregate financials
+                    # Aggregate financials including offer prices
                     cat_listino = self._safe_float(category.get(JsonFields.PRICELIST_SUBTOTAL, 0))
                     cat_costo = self._safe_float(category.get(JsonFields.COST_SUBTOTAL, 0))
+                    cat_offer = self._safe_float(category.get(JsonFields.OFFER_PRICE, 0))
                     
                     wbe_data[wbe]['total_listino'] += cat_listino
                     wbe_data[wbe]['total_costo'] += cat_costo
+                    wbe_data[wbe]['total_offer'] += cat_offer
                     
                     # Collect items for detailed analysis
                     for item in category.get(JsonFields.ITEMS, []):
@@ -393,23 +546,46 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         st.markdown("---")
         st.subheader(f"📊 Detailed Analysis: {wbe_name}")
         
-        # Financial overview
+        # Financial overview - include offer price if available
         total_listino = wbe_data['total_listino']
         total_costo = wbe_data['total_costo']
+        total_offer = wbe_data.get('total_offer', 0)
         margin = total_listino - total_costo
         margin_perc = (margin / total_listino * 100) if total_listino > 0 else 0
         
-        # Key metrics
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Listino", f"€{total_listino:,.2f}")
-        with col2:
-            st.metric("Total Costo", f"€{total_costo:,.2f}")
-        with col3:
-            st.metric("Margin", f"€{margin:,.2f}")
-        with col4:
-            delta_color = "normal" if margin_perc > 20 else "inverse"
-            st.metric("Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
+        # Calculate offer-based margin if offer price is available
+        if total_offer > 0:
+            offer_margin = total_offer - total_costo
+            offer_margin_perc = (1 - (total_costo / total_offer)) * 100 if total_offer > 0 else 0
+        else:
+            offer_margin = 0
+            offer_margin_perc = 0
+        
+        # Key metrics - show offer data if available
+        if total_offer > 0:
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.metric("Total Listino", f"€{total_listino:,.2f}")
+            with col2:
+                st.metric("Total Cost", f"€{total_costo:,.2f}")
+            with col3:
+                st.metric("Total Offer (VA21)", f"€{total_offer:,.2f}")
+            with col4:
+                st.metric("Offer Margin", f"€{offer_margin:,.2f}")
+            with col5:
+                delta_color = "normal" if offer_margin_perc > 20 else "inverse"
+                st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%", delta=f"{offer_margin_perc - 20:.1f}%")
+        else:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Listino", f"€{total_listino:,.2f}")
+            with col2:
+                    st.metric("Total Cost", f"€{total_costo:,.2f}")
+            with col3:
+                    st.metric("Listino Margin", f"€{margin:,.2f}")
+            with col4:
+                delta_color = "normal" if margin_perc > 20 else "inverse"
+                st.metric("Listino Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
         
         # Cost composition analysis
         st.subheader("💰 Cost Composition Analysis")
@@ -535,8 +711,13 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             category = cat_info['category']
             cat_listino = self._safe_float(category.get(JsonFields.PRICELIST_SUBTOTAL, 0))
             cat_costo = self._safe_float(category.get(JsonFields.COST_SUBTOTAL, 0))
+            cat_offer = self._safe_float(category.get(JsonFields.OFFER_PRICE, 0))
             cat_margin = cat_listino - cat_costo
             cat_margin_perc = (cat_margin / cat_listino * 100) if cat_listino > 0 else 0
+            
+            # Calculate offer-based margin if offer price is available
+            cat_offer_margin = cat_offer - cat_costo if cat_offer > 0 else 0
+            cat_offer_margin_perc = (1 - (cat_costo / cat_offer)) * 100 if cat_offer > 0 else 0
             
             cat_data.append({
                 'Group': cat_info[JsonFields.GROUP_ID],
@@ -545,8 +726,11 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                 'Items': len(category.get(JsonFields.ITEMS, [])),
                 'Listino (€)': cat_listino,
                 'Costo (€)': cat_costo,
-                'Margin (€)': cat_margin,
-                'Margin %': cat_margin_perc
+                'Offer (€)': cat_offer,
+                'Listino Margin (€)': cat_margin,
+                'Listino Margin %': cat_margin_perc,
+                'Offer Margin (€)': cat_offer_margin,
+                'Offer Margin %': cat_offer_margin_perc
             })
         
         df_categories = pd.DataFrame(cat_data)
@@ -554,18 +738,217 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         if not df_categories.empty:
             st.dataframe(df_categories, use_container_width=True)
             
-            # Category comparison chart
+            # Category comparison chart - prioritize offer data if available
+            has_offer_data = any(row['Offer (€)'] > 0 for _, row in df_categories.iterrows())
+            
             if len(df_categories) > 1:
-                fig_cat = px.bar(
-                    df_categories,
-                    x='Category',
-                    y=['Costo (€)', 'Margin (€)'],
-                    title=f'Cost vs Margin by Category in {wbe_name}',
-                    barmode='stack',
-                    color_discrete_map={'Costo (€)': '#ff6b6b', 'Margin (€)': '#51cf66'}
-                )
-                fig_cat.update_layout(height=400)
+                if has_offer_data:
+                    # Show offer-based comparison when offer data is available
+                    fig_cat = px.bar(
+                        df_categories[df_categories['Offer (€)'] > 0],
+                        x='Category',
+                        y=['Costo (€)', 'Offer Margin (€)'],
+                        title=f'Cost vs Offer Margin by Category in {wbe_name}',
+                        barmode='stack',
+                        color_discrete_map={'Costo (€)': '#ff6b6b', 'Offer Margin (€)': '#51cf66'}
+                    )
+                else:
+                    # Fallback to listino-based comparison
+                    fig_cat = px.bar(
+                        df_categories,
+                        x='Category',
+                            y=['Costo (€)', 'Listino Margin (€)'],
+                            title=f'Cost vs Listino Margin by Category in {wbe_name}',
+                        barmode='stack',
+                            color_discrete_map={'Costo (€)': '#ff6b6b', 'Listino Margin (€)': '#51cf66'}
+                    )
+                    fig_cat.update_layout(height=400)
                 st.plotly_chart(fig_cat, use_container_width=True)
+        
+        # NEW SECTION: Category-level Cost vs Offer Analysis
+        if has_offer_data:
+            st.subheader("💰 Cost vs Offer Analysis by Category")
+            st.markdown("*This analysis compares WBE cost against WBE offer prices from VA21 data for each category.*")
+            
+            # Filter categories with offer data
+            categories_with_offers = df_categories[df_categories['Offer (€)'] > 0].copy()
+            
+            if not categories_with_offers.empty:
+                # Create enhanced comparison table
+                st.markdown("##### 📋 Detailed Cost vs Offer Comparison")
+                
+                # Prepare data for better visualization
+                comparison_data = []
+                for _, row in categories_with_offers.iterrows():
+                    comparison_data.append({
+                        'Category': row['Category'],
+                        'Name': row['Name'],
+                        'Cost (€)': row['Costo (€)'],
+                        'Offer (€)': row['Offer (€)'],
+                        'Offer Margin (€)': row['Offer Margin (€)'],
+                        'Offer Margin %': row['Offer Margin %'],
+                        'Cost/Offer Ratio': (row['Costo (€)'] / row['Offer (€)']) if row['Offer (€)'] > 0 else 0
+                    })
+                
+                df_comparison = pd.DataFrame(comparison_data)
+                
+                # Enhanced metrics display
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    avg_margin_perc = df_comparison['Offer Margin %'].mean()
+                    st.metric(
+                        "Avg Offer Margin %", 
+                        f"{avg_margin_perc:.2f}%",
+                        delta=f"{avg_margin_perc - 20:.1f}%" if avg_margin_perc != 0 else None
+                    )
+                
+                with col2:
+                    min_margin_perc = df_comparison['Offer Margin %'].min()
+                    min_category = df_comparison.loc[df_comparison['Offer Margin %'].idxmin(), 'Category']
+                    st.metric(
+                        "Lowest Margin %", 
+                        f"{min_margin_perc:.2f}%",
+                        delta=f"({min_category})"
+                    )
+                
+                with col3:
+                    max_margin_perc = df_comparison['Offer Margin %'].max()
+                    max_category = df_comparison.loc[df_comparison['Offer Margin %'].idxmax(), 'Category']
+                    st.metric(
+                        "Highest Margin %", 
+                        f"{max_margin_perc:.2f}%",
+                        delta=f"({max_category})"
+                    )
+                
+                with col4:
+                    profitable_categories = len(df_comparison[df_comparison['Offer Margin %'] > 0])
+                    total_categories = len(df_comparison)
+                    st.metric(
+                        "Profitable Categories", 
+                        f"{profitable_categories}/{total_categories}",
+                        delta=f"{(profitable_categories/total_categories)*100:.1f}%"
+                    )
+                
+                # Enhanced comparison table
+                try:
+                    # Try to apply background gradient (requires matplotlib)
+                    styled_df = df_comparison.style.format({
+                        'Cost (€)': '€{:,.2f}',
+                        'Offer (€)': '€{:,.2f}',
+                        'Offer Margin (€)': '€{:,.2f}',
+                        'Offer Margin %': '{:.2f}%',
+                        'Cost/Offer Ratio': '{:.3f}'
+                    }).background_gradient(
+                        subset=['Offer Margin %'], 
+                        cmap='RdYlGn', 
+                        vmin=-50, 
+                        vmax=50
+                    )
+                except ImportError:
+                    # Fall back to basic formatting if matplotlib is not available
+                    styled_df = df_comparison.style.format({
+                        'Cost (€)': '€{:,.2f}',
+                        'Offer (€)': '€{:,.2f}',
+                        'Offer Margin (€)': '€{:,.2f}',
+                        'Offer Margin %': '{:.2f}%',
+                        'Cost/Offer Ratio': '{:.3f}'
+                    })
+                
+                st.dataframe(styled_df, use_container_width=True)
+                
+                # Visualizations
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Margin percentage comparison chart
+                    fig_margin = px.bar(
+                        df_comparison.sort_values('Offer Margin %', ascending=True),
+                        x='Offer Margin %',
+                        y='Category',
+                        orientation='h',
+                        title='Offer Margin % by Category',
+                        color='Offer Margin %',
+                        color_continuous_scale='RdYlGn',
+                        color_continuous_midpoint=0,
+                        text='Offer Margin %'
+                    )
+                    fig_margin.update_traces(
+                        texttemplate='%{text:.1f}%', 
+                        textposition='outside'
+                    )
+                    fig_margin.add_vline(x=0, line_dash="dash", line_color="red")
+                    fig_margin.add_vline(x=20, line_dash="dash", line_color="green")
+                    # Add annotation for the target line
+                    fig_margin.add_annotation(
+                        x=20,
+                        y=df_comparison['Category'].iloc[len(df_comparison)//2],  # Middle of the chart
+                        text="Target 20%",
+                        showarrow=False,
+                        font=dict(color="green", size=10),
+                        bgcolor="rgba(255,255,255,0.8)",
+                        bordercolor="green",
+                        borderwidth=1,
+                        xshift=10  # Shift text slightly to the right of the line
+                    )
+                    fig_margin.update_layout(height=400)
+                    st.plotly_chart(fig_margin, use_container_width=True)
+                
+                with col2:
+                    # Cost vs Offer scatter plot
+                    fig_scatter = px.scatter(
+                        df_comparison,
+                        x='Cost (€)',
+                        y='Offer (€)',
+                        size='Offer Margin (€)',
+                        color='Offer Margin %',
+                        hover_data=['Category', 'Name'],
+                        title='Cost vs Offer Price Analysis',
+                        color_continuous_scale='RdYlGn',
+                        color_continuous_midpoint=0
+                    )
+                    # Add diagonal line (break-even line where cost = offer)
+                    max_val = max(df_comparison['Cost (€)'].max(), df_comparison['Offer (€)'].max())
+                    fig_scatter.add_shape(
+                        type="line",
+                        x0=0, y0=0, x1=max_val, y1=max_val,
+                        line=dict(color="red", width=2, dash="dash")
+                    )
+                    # Add annotation for the break-even line
+                    fig_scatter.add_annotation(
+                        x=max_val * 0.8,
+                        y=max_val * 0.8,
+                        text="Break-even line",
+                        showarrow=False,
+                        font=dict(color="red", size=12),
+                        bgcolor="rgba(255,255,255,0.8)",
+                        bordercolor="red",
+                        borderwidth=1
+                    )
+                    fig_scatter.update_layout(height=400)
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                
+                # Summary insights
+                st.markdown("##### 🔍 Key Insights")
+                
+                # Calculate insights
+                negative_margin_cats = df_comparison[df_comparison['Offer Margin %'] < 0]
+                high_margin_cats = df_comparison[df_comparison['Offer Margin %'] > 30]
+                
+                insights = []
+                if not negative_margin_cats.empty:
+                    insights.append(f"⚠️ **{len(negative_margin_cats)} categories** have negative offer margins")
+                if not high_margin_cats.empty:
+                    insights.append(f"✅ **{len(high_margin_cats)} categories** have high margins (>30%)")
+                
+                insights.append(f"📊 Average cost/offer ratio: **{df_comparison['Cost/Offer Ratio'].mean():.3f}**")
+                insights.append(f"💰 Total offer value: **€{df_comparison['Offer (€)'].sum():,.2f}**")
+                insights.append(f"💸 Total cost: **€{df_comparison['Cost (€)'].sum():,.2f}**")
+                
+                for insight in insights:
+                    st.markdown(insight)
+            else:
+                st.warning("No categories with offer prices found for detailed analysis.")
         
         # Time analysis for WBE
         st.subheader("⏱️ Time Analysis")

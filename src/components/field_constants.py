@@ -45,6 +45,7 @@ class JsonFields:
     PRICELIST_SUBTOTAL = "pricelist_subtotal"
     COST_SUBTOTAL = "cost_subtotal"
     TOTAL_COST = "total_cost"
+    OFFER_PRICE = "offer_price"
     
     # Basic item fields
     POSITION = "position"
@@ -142,7 +143,6 @@ class JsonFields:
     LISTINO_TOTAL_PRICE = "listino_total_price"
     SUBTOTAL_LISTINO = "subtotal_listino"
     SUBTOTAL_CODICE = "subtotal_codice"
-    TOTAL_OFFER = "total_offer"
     
     # Totals fields
     TOTALS = "totals"
@@ -151,8 +151,11 @@ class JsonFields:
     SUBTOTAL = "subtotal"
     TOTAL_LISTINO = "total_listino"
     TOTAL_COSTO = "total_costo"
+    TOTAL_OFFER = "total_offer"
     MARGIN = "margin"
     MARGIN_PERCENTAGE = "margin_percentage"
+    OFFER_MARGIN = "offer_margin"
+    OFFER_MARGIN_PERCENTAGE = "offer_margin_percentage"
     GRAND_TOTAL = "grand_total"
     DOC_FEE = "doc_fee"
     PM_FEE = "pm_fee"
