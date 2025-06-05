@@ -10,10 +10,11 @@ from pathlib import Path
 
 # Import parsers and models
 import sys
+
+from parsers.pre_file_parser_direct import DirectPreFileParser
+from parsers.analisi_profittabilita_parser_direct import DirectAnalisiProfittabilitaParser
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from models import IndustrialQuotation
-from .pre_file_parser import PreFileParser, parse_pre_to_model
-from .analisi_profittabilita_parser import AnalisiProfittabilitaParser, parse_analisi_profittabilita_to_model
 
 logger = logging.getLogger(__name__)
 
@@ -54,26 +55,28 @@ class UnifiedQuotationParser:
     
     def _detect_file_type(self) -> str:
         """
-        Detect the type of quotation file based on filename patterns
+        Detect the type of quotation file based on the presence of the 'NEW_OFFER1' sheet.
         
         Returns:
             File type: 'pre' or 'analisi_profittabilita'
         """
-        file_name_lower = self.file_name.lower()
-        
-        # Check for PRE file indicators
-        for indicator in self.PRE_FILE_INDICATORS:
-            if indicator.lower() in file_name_lower:
-                return 'pre'
-        
-        # Check for Analisi Profittabilita indicators
-        for indicator in self.ANALISI_PROFITTABILITA_INDICATORS:
-            if indicator.lower() in file_name_lower:
-                return 'analisi_profittabilita'
-        
-        # Default to analisi_profittabilita if unsure (it's more comprehensive)
-        logger.warning(f"Could not detect file type for {self.file_name}, defaulting to analisi_profittabilita")
-        return 'analisi_profittabilita'
+        from openpyxl import load_workbook
+
+        try:
+            wb = load_workbook(self.file_path, read_only=True, data_only=True)
+            try:
+                sheet_names = [sheet_name.strip() for sheet_name in wb.sheetnames]
+                if "NEW_OFFER1" in sheet_names:
+                    logger.info(f"'NEW_OFFER1' sheet found in {self.file_name}: detected as analisi_profittabilita")
+                    return 'analisi_profittabilita'
+                else:
+                    logger.info(f"'NEW_OFFER1' sheet not found in {self.file_name}: detected as pre")
+                    return 'pre'
+            finally:
+                wb.close()
+        except Exception as e:
+            logger.warning(f"Could not open file {self.file_name} to detect sheet names: {e}. Defaulting to analisi_profittabilita.")
+            return 'analisi_profittabilita'
     
     def parse(self) -> IndustrialQuotation:
         """
@@ -86,11 +89,11 @@ class UnifiedQuotationParser:
         
         try:
             if self.detected_type == 'pre':
-                parser = PreFileParser(self.file_path)
-                return parser.parse_to_model()
+                parser = DirectPreFileParser(self.file_path)
+                return parser.parse()
             else:  # analisi_profittabilita
-                parser = AnalisiProfittabilitaParser(self.file_path)
-                return parser.parse_to_model()
+                parser = DirectAnalisiProfittabilitaParser(self.file_path)
+                return parser.parse()
                 
         except Exception as e:
             logger.error(f"Failed to parse {self.file_name} as {self.detected_type}: {e}")
@@ -101,11 +104,11 @@ class UnifiedQuotationParser:
             
             try:
                 if fallback_type == 'pre':
-                    parser = PreFileParser(self.file_path)
-                    return parser.parse_to_model()
+                    parser = DirectPreFileParser(self.file_path)
+                    return parser.parse()
                 else:
-                    parser = AnalisiProfittabilitaParser(self.file_path)
-                    return parser.parse_to_model()
+                    parser = DirectAnalisiProfittabilitaParser(self.file_path)
+                    return parser.parse()
             except Exception as fallback_error:
                 logger.error(f"Fallback parsing also failed: {fallback_error}")
                 raise Exception(f"Could not parse {self.file_name} with either parser. Original error: {e}, Fallback error: {fallback_error}")
@@ -192,9 +195,11 @@ def parse_quotation_file(file_path: str, output_path: Optional[str] = None,
     if force_parser:
         logger.info(f"Forcing parser type: {force_parser}")
         if force_parser == 'pre':
-            return parse_pre_to_model(file_path, output_path)
+            from parsers.pre_file_parser_direct import parse_pre_file_direct
+            return parse_pre_file_direct(file_path, output_path)
         elif force_parser == 'analisi_profittabilita':
-            return parse_analisi_profittabilita_to_model(file_path, output_path)
+            from parsers.analisi_profittabilita_parser_direct import parse_analisi_profittabilita_direct
+            return parse_analisi_profittabilita_direct(file_path, output_path)
         else:
             raise ValueError(f"Invalid forced parser type: {force_parser}")
     

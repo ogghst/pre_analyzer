@@ -17,6 +17,7 @@ from .quotation_models import (
     # Enums
     CurrencyType,
     CategoryType,
+    ParserType,
 )
 
 from .field_mappings import FieldMapper
@@ -35,6 +36,7 @@ __all__ = [
     # Enums
     "CurrencyType",
     "CategoryType",
+    "ParserType",
     
     # Utilities
     "FieldMapper",

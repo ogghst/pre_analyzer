@@ -18,7 +18,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from models.quotation_models import (
     IndustrialQuotation, ProjectInfo, ProjectParameters, SalesInfo,
     ProductGroup, QuotationCategory, QuotationItem, QuotationTotals,
-    CurrencyType, CategoryType
+    CurrencyType, CategoryType, ParserType
 )
 
 # Configure logging
@@ -429,28 +429,39 @@ class DirectAnalisiProfittabilitaParser:
             offer_margin_percentage=float(self._round_decimal(offer_margin_percentage))
         )
     
+    def close(self):
+        """Close the workbook and release file handles"""
+        if self.workbook:
+            self.workbook.close()
+            self.workbook = None
+            self.ws = None
+
     def parse(self) -> IndustrialQuotation:
         """Main parsing method - returns IndustrialQuotation object directly"""
         logger.info(f"Starting direct parsing of Analisi Profittabilita file: {self.file_path}")
         
-        self.load_workbook()
-        
-        # Extract all sections as model objects
-        project_info = self.extract_project_info()
-        product_groups = self.extract_product_groups()
-        totals = self.calculate_totals(product_groups, project_info.parameters)
-        
-        # Create final IndustrialQuotation object
-        quotation = IndustrialQuotation(
-            project=project_info,
-            product_groups=product_groups,
-            totals=totals,
-            source_file=str(self.file_path),
-            parser_type="direct_analisi_profittabilita_parser"
-        )
-        
-        logger.info(f"Direct parsing completed. Found {len(product_groups)} product groups")
-        return quotation
+        try:
+            self.load_workbook()
+            
+            # Extract all sections as model objects
+            project_info = self.extract_project_info()
+            product_groups = self.extract_product_groups()
+            totals = self.calculate_totals(product_groups, project_info.parameters)
+            
+            # Create final IndustrialQuotation object
+            quotation = IndustrialQuotation(
+                project=project_info,
+                product_groups=product_groups,
+                totals=totals,
+                source_file=str(self.file_path),
+                parser_type=ParserType.ANALISI_PROFITTABILITA_PARSER
+            )
+            
+            logger.info(f"Direct parsing completed. Found {len(product_groups)} product groups")
+            return quotation
+        finally:
+            # Always close the workbook to release file handles
+            self.close()
     
     # Helper methods
     def _safe_cell_value(self, row: int, column: int, default: Any = None) -> Any:
@@ -540,13 +551,16 @@ def parse_analisi_profittabilita_direct(file_path: str, output_path: Optional[st
         IndustrialQuotation: Validated quotation model instance
     """
     parser = DirectAnalisiProfittabilitaParser(file_path)
-    quotation = parser.parse()
-    
-    if output_path:
-        quotation.save_json(output_path)
-        logger.info(f"JSON output saved to {output_path}")
-    
-    return quotation
+    try:
+        quotation = parser.parse()
+        
+        if output_path:
+            quotation.save_json(output_path)
+            logger.info(f"JSON output saved to {output_path}")
+        
+        return quotation
+    finally:
+        parser.close()
 
 def validate_analisi_profittabilita_file(file_path: str) -> Dict[str, Any]:
     """
@@ -558,8 +572,8 @@ def validate_analisi_profittabilita_file(file_path: str) -> Dict[str, Any]:
     Returns:
         Dictionary with validation results
     """
+    parser = DirectAnalisiProfittabilitaParser(file_path)
     try:
-        parser = DirectAnalisiProfittabilitaParser(file_path)
         quotation = parser.parse()
         
         # Run validation checks
@@ -580,6 +594,8 @@ def validate_analisi_profittabilita_file(file_path: str) -> Dict[str, Any]:
             "summary_stats": {},
             "errors": [str(e)]
         }
+    finally:
+        parser.close()
 
 if __name__ == "__main__":
     # Example usage

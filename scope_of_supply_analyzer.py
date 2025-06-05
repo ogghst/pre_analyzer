@@ -26,6 +26,7 @@ from components.ui_components import (
 )
 from components.analyzers.pre_analyzer import PreAnalyzer
 from components.analyzers.profittabilita_analyzer import ProfittabilitaAnalyzer
+from components.analyzers.unified_analyzer import UnifiedAnalyzer
 from components.analyzers.pre_comparator import PreComparator
 from components.analyzers.profittabilita_comparator import ProfittabilitaComparator
 from components.analyzers.pre_profittabilita_comparator import PreProfittabilitaComparator
@@ -33,12 +34,14 @@ from components.analyzers.pre_profittabilita_comparator import PreProfittabilita
 # Import parsers
 from parsers.pre_file_parser import parse_pre_to_json
 from parsers.analisi_profittabilita_parser import parse_analisi_profittabilita_to_json
+from parsers.unified_parser import parse_quotation_file
 
 
 class OperationMode(Enum):
     """Enumeration of available operation modes"""
     ANALYZE_PRE = "analyze_pre"
     ANALYZE_PROFITTABILITA = "analyze_profittabilita"
+    ANALYZE_UNIFIED = "analyze_unified"
     COMPARE_PRE = "compare_pre"
     COMPARE_PROFITTABILITA = "compare_profittabilita"
     CROSS_COMPARE_PRE_PROFITTABILITA = "cross_compare_pre_profittabilita"
@@ -96,6 +99,7 @@ class ProjectStructureAnalyzer:
         operation_options = {
             "📊 Analyze PRE File": OperationMode.ANALYZE_PRE,
             "💹 Analyze Analisi Profittabilita": OperationMode.ANALYZE_PROFITTABILITA,
+            "🎯 Smart Analysis (Auto-Detect)": OperationMode.ANALYZE_UNIFIED,
             "🔄 Compare Two PRE Files": OperationMode.COMPARE_PRE,
             "⚖️ Compare Two Profittabilita Files": OperationMode.COMPARE_PROFITTABILITA,
             "🔗 Cross-Compare PRE vs Profittabilita": OperationMode.CROSS_COMPARE_PRE_PROFITTABILITA
@@ -122,15 +126,16 @@ class ProjectStructureAnalyzer:
             self.reset_state()
             st.rerun()
     
-    def process_file(self, uploaded_file, file_type: FileType) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def process_file(self, uploaded_file, file_type: FileType = None) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
         """Process a single file based on its type with caching to avoid re-parsing"""
         try:
             # Create a unique key for this file based on name and size
-            file_key = f"{uploaded_file.name}_{uploaded_file.size}_{file_type.value}"
+            file_key = f"{uploaded_file.name}_{uploaded_file.size}_{file_type.value if file_type else 'unified'}"
             
             # Check if we already have this file parsed in session state
             if f"parsed_data_{file_key}" in st.session_state:
-                return st.session_state[f"parsed_data_{file_key}"], None
+                cached_data = st.session_state[f"parsed_data_{file_key}"]
+                return cached_data['data'], None, cached_data.get('detected_type')
             
             # Create temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
@@ -138,18 +143,31 @@ class ProjectStructureAnalyzer:
                 temp_file_path = tmp_file.name
             
             try:
+                detected_type = None
+                
                 # Parse based on file type
                 if file_type == FileType.PRE_FILE:
                     data = parse_pre_to_json(temp_file_path)
+                    detected_type = 'pre'
                 elif file_type == FileType.ANALISI_PROFITTABILITA:
                     data = parse_analisi_profittabilita_to_json(temp_file_path)
+                    detected_type = 'analisi_profittabilita'
+                elif file_type is None:  # Unified parsing
+                    # Use unified parser for auto-detection
+                    quotation_model = parse_quotation_file(temp_file_path)
+                    data = quotation_model.to_parser_dict()
+                    # Try to detect type from unified parser
+                    from parsers.unified_parser import UnifiedQuotationParser
+                    parser = UnifiedQuotationParser(temp_file_path)
+                    detected_type = parser.detected_type
                 else:
-                    return None, f"Unsupported file type: {file_type}"
+                    return None, f"Unsupported file type: {file_type}", None
                 
                 # Cache the parsed data in session state
-                st.session_state[f"parsed_data_{file_key}"] = data
+                cache_entry = {'data': data, 'detected_type': detected_type}
+                st.session_state[f"parsed_data_{file_key}"] = cache_entry
                 
-                return data, None
+                return data, None, detected_type
                 
             finally:
                 # Clean up temporary file
@@ -157,33 +175,103 @@ class ProjectStructureAnalyzer:
                     os.unlink(temp_file_path)
                     
         except Exception as e:
-            return None, f"Error processing file: {str(e)}"
+            return None, f"Error processing file: {str(e)}", None
     
     def render_single_file_upload(self, file_type: FileType, title: str):
         """Render single file upload for analysis mode"""
         st.sidebar.subheader(title)
         
         file_extensions = ['xlsx', 'xls', 'xlsm']
-        help_text = f"Upload a {file_type.value} file for analysis"
+        help_text = f"Upload a {file_type.value if file_type else 'quotation'} file for analysis"
         
         uploaded_file = st.sidebar.file_uploader(
-            f"Choose {file_type.value} file",
+            f"Choose {file_type.value if file_type else 'quotation'} file",
             type=file_extensions,
-            key=f"single_file_uploader_{file_type.value}",
+            key=f"single_file_uploader_{file_type.value if file_type else 'unified'}",
             help=help_text
         )
         
         if uploaded_file is not None:
             with st.spinner(f"Processing {uploaded_file.name}..."):
-                data, error = self.process_file(uploaded_file, file_type)
+                data, error, detected_type = self.process_file(uploaded_file, file_type)
                 
                 if data is not None:
-                    st.sidebar.success(f"✅ {uploaded_file.name} loaded successfully")
-                    return data, uploaded_file.name
+                    success_msg = f"✅ {uploaded_file.name} loaded successfully"
+                    if detected_type:
+                        file_type_display = "PRE" if detected_type == 'pre' else "Analisi Profittabilita"
+                        success_msg += f" (Detected: {file_type_display})"
+                    st.sidebar.success(success_msg)
+                    return data, uploaded_file.name, detected_type
                 else:
                     st.sidebar.error(f"❌ Error processing {uploaded_file.name}: {error}")
         
-        return None, None
+        return None, None, None
+    
+    def render_unified_file_upload(self, title: str):
+        """Render file upload for unified analysis mode using direct parsers"""
+        st.sidebar.subheader(title)
+        
+        file_extensions = ['xlsx', 'xls', 'xlsm']
+        help_text = "Upload a quotation file for smart analysis (auto-detects PRE or Analisi Profittabilita)"
+        
+        uploaded_file = st.sidebar.file_uploader(
+            "Choose quotation file",
+            type=file_extensions,
+            key="unified_file_uploader",
+            help=help_text
+        )
+        
+        if uploaded_file is not None:
+            with st.spinner(f"Processing {uploaded_file.name}..."):
+                try:
+                    # Import direct parsers and UnifiedAnalyzer
+                    from parsers.pre_file_parser_direct import parse_pre_file_direct
+                    from parsers.analisi_profittabilita_parser_direct import parse_analisi_profittabilita_direct
+                    from parsers.unified_parser import UnifiedQuotationParser
+                    from components.analyzers.unified_analyzer import UnifiedAnalyzer
+                    import tempfile
+                    import os
+                    
+                    # Create temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                        tmp_file.write(uploaded_file.getbuffer())
+                        temp_file_path = tmp_file.name
+                    
+                    try:
+                        # First detect file type using unified parser
+                        detector = UnifiedQuotationParser(temp_file_path)
+                        detected_type = detector.detected_type
+                        
+                        # Parse with appropriate direct parser
+                        if detected_type == 'pre':
+                            quotation_model = parse_pre_file_direct(temp_file_path)
+                            file_type_display = "PRE"
+                        elif detected_type == 'analisi_profittabilita':
+                            quotation_model = parse_analisi_profittabilita_direct(temp_file_path)
+                            file_type_display = "Analisi Profittabilita"
+                        else:
+                            st.sidebar.error(f"❌ Unknown file type detected: {detected_type}")
+                            return None, None, None
+                        
+                        # Create UnifiedAnalyzer directly with IndustrialQuotation object
+                        analyzer = UnifiedAnalyzer(quotation_model)
+                        
+                        # Success message
+                        success_msg = f"✅ {uploaded_file.name} analyzed successfully (Detected: {file_type_display})"
+                        st.sidebar.success(success_msg)
+                        
+                        return analyzer, uploaded_file.name, detected_type
+                        
+                    finally:
+                        # Clean up temporary file
+                        if os.path.exists(temp_file_path):
+                            os.unlink(temp_file_path)
+                            
+                except Exception as e:
+                    st.sidebar.error(f"❌ Error processing {uploaded_file.name}: {str(e)}")
+                    return None, None, None
+        
+        return None, None, None
     
     def render_dual_file_upload(self, file_type: FileType, title: str):
         """Render dual file upload for comparison mode"""
@@ -215,7 +303,7 @@ class ProjectStructureAnalyzer:
         if uploaded_file1 is not None:
             file1_name = uploaded_file1.name
             with st.spinner(f"Processing {file1_name}..."):
-                data1, error1 = self.process_file(uploaded_file1, file_type)
+                data1, error1, _ = self.process_file(uploaded_file1, file_type)
                 
                 if data1 is not None:
                     st.sidebar.success(f"✅ {file1_name} loaded successfully")
@@ -225,7 +313,7 @@ class ProjectStructureAnalyzer:
         if uploaded_file2 is not None:
             file2_name = uploaded_file2.name
             with st.spinner(f"Processing {file2_name}..."):
-                data2, error2 = self.process_file(uploaded_file2, file_type)
+                data2, error2, _ = self.process_file(uploaded_file2, file_type)
                 
                 if data2 is not None:
                     st.sidebar.success(f"✅ {file2_name} loaded successfully")
@@ -265,7 +353,7 @@ class ProjectStructureAnalyzer:
         if uploaded_pre_file is not None:
             pre_file_name = uploaded_pre_file.name
             with st.spinner(f"Processing PRE file: {pre_file_name}..."):
-                pre_data, error_pre = self.process_file(uploaded_pre_file, FileType.PRE_FILE)
+                pre_data, error_pre, _ = self.process_file(uploaded_pre_file, FileType.PRE_FILE)
                 
                 if pre_data is not None:
                     st.sidebar.success(f"✅ {pre_file_name} loaded successfully")
@@ -275,7 +363,7 @@ class ProjectStructureAnalyzer:
         if uploaded_prof_file is not None:
             prof_file_name = uploaded_prof_file.name
             with st.spinner(f"Processing Profittabilita file: {prof_file_name}..."):
-                prof_data, error_prof = self.process_file(uploaded_prof_file, FileType.ANALISI_PROFITTABILITA)
+                prof_data, error_prof, _ = self.process_file(uploaded_prof_file, FileType.ANALISI_PROFITTABILITA)
                 
                 if prof_data is not None:
                     st.sidebar.success(f"✅ {prof_file_name} loaded successfully")
@@ -284,11 +372,11 @@ class ProjectStructureAnalyzer:
         
         return pre_data, prof_data, pre_file_name, prof_file_name
     
-    def create_analyzer(self, data, file_type: FileType):
+    def create_analyzer(self, data, file_type: FileType = None, detected_type: str = None):
         """Create appropriate analyzer based on file type with caching"""
         # Create a unique key for this analyzer
         data_hash = hash(str(data.get('project', {}).get('id', '')) + str(len(data.get('product_groups', []))))
-        analyzer_key = f"analyzer_{file_type.value}_{data_hash}"
+        analyzer_key = f"analyzer_{file_type.value if file_type else 'unified'}_{data_hash}"
         
         # Check if we already have this analyzer in session state
         if analyzer_key in st.session_state:
@@ -299,6 +387,8 @@ class ProjectStructureAnalyzer:
             analyzer = PreAnalyzer(data)
         elif file_type == FileType.ANALISI_PROFITTABILITA:
             analyzer = ProfittabilitaAnalyzer(data)
+        elif file_type is None:  # Unified analyzer
+            analyzer = UnifiedAnalyzer(data, detected_type)
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
         
@@ -950,7 +1040,7 @@ class ProjectStructureAnalyzer:
             try:
                 # Handle different operation modes
                 if operation_mode == OperationMode.ANALYZE_PRE:
-                    data, file_name = self.render_single_file_upload(FileType.PRE_FILE, "📊 PRE File Analysis")
+                    data, file_name, _ = self.render_single_file_upload(FileType.PRE_FILE, "📊 PRE File Analysis")
                     if data is not None:
                         self.current_data = data
                         self.current_file_type = FileType.PRE_FILE
@@ -958,11 +1048,19 @@ class ProjectStructureAnalyzer:
                         st.session_state.analyzer_initialized = True
                 
                 elif operation_mode == OperationMode.ANALYZE_PROFITTABILITA:
-                    data, file_name = self.render_single_file_upload(FileType.ANALISI_PROFITTABILITA, "💹 Profittabilita Analysis")
+                    data, file_name, _ = self.render_single_file_upload(FileType.ANALISI_PROFITTABILITA, "💹 Profittabilita Analysis")
                     if data is not None:
                         self.current_data = data
                         self.current_file_type = FileType.ANALISI_PROFITTABILITA
                         self.current_analyzer = self.create_analyzer(data, FileType.ANALISI_PROFITTABILITA)
+                        st.session_state.analyzer_initialized = True
+                
+                elif operation_mode == OperationMode.ANALYZE_UNIFIED:
+                    analyzer, file_name, detected_type = self.render_unified_file_upload("🎯 Smart Analysis (Auto-Detect)")
+                    if analyzer is not None:
+                        self.current_analyzer = analyzer
+                        self.current_data = analyzer.quotation.to_parser_dict()  # Convert to dict format for compatibility
+                        self.current_file_type = None  # Unified mode
                         st.session_state.analyzer_initialized = True
                 
                 elif operation_mode == OperationMode.COMPARE_PRE:
@@ -1002,7 +1100,7 @@ class ProjectStructureAnalyzer:
                 )
             
             # Navigation for analysis mode
-            if self.current_analyzer is not None and operation_mode in [OperationMode.ANALYZE_PRE, OperationMode.ANALYZE_PROFITTABILITA]:
+            if self.current_analyzer is not None and operation_mode in [OperationMode.ANALYZE_PRE, OperationMode.ANALYZE_PROFITTABILITA, OperationMode.ANALYZE_UNIFIED]:
                 try:
                     selected_view = render_navigation_sidebar(
                         self.current_analyzer, 
@@ -1080,7 +1178,7 @@ class ProjectStructureAnalyzer:
             render_debug_info()
         
         # Main content area
-        if operation_mode in [OperationMode.ANALYZE_PRE, OperationMode.ANALYZE_PROFITTABILITA]:
+        if operation_mode in [OperationMode.ANALYZE_PRE, OperationMode.ANALYZE_PROFITTABILITA, OperationMode.ANALYZE_UNIFIED]:
             # Analysis mode
             if (self.current_analyzer is not None and 
                 self.current_data is not None and 

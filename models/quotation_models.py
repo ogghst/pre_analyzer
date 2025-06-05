@@ -29,6 +29,11 @@ class CategoryType(str, Enum):
     EQUIPMENT = "EQUIPMENT"  # Non-installation categories
     INSTALLATION = "INSTALLATION"  # Installation categories (starting with 'E')
 
+class ParserType(str, Enum):
+    """Supported parser types for quotation files"""
+    PRE_FILE_PARSER = "pre_file_parser"
+    ANALISI_PROFITTABILITA_PARSER = "analisi_profittabilita_parser"
+
 # =============================================================================
 # BASE MODELS
 # =============================================================================
@@ -571,7 +576,7 @@ class IndustrialQuotation(BaseModel):
         default=None,
         description="Path to the source Excel file that was parsed"
     )
-    parser_type: Optional[str] = Field(
+    parser_type: ParserType = Field(
         default=None,
         description="Type of parser used (pre_file_parser or analisi_profittabilita_parser)"
     )
@@ -775,18 +780,32 @@ class IndustrialQuotation(BaseModel):
     # =============================================================================
 
     @classmethod
-    def from_parser_dict(cls, data: Dict[str, Any], source_file: str = None, parser_type: str = None) -> 'IndustrialQuotation':
+    def from_parser_dict(cls, data: Dict[str, Any], source_file: str = None, parser_type: Union[str, ParserType] = None) -> 'IndustrialQuotation':
         """
         Create IndustrialQuotation from parser output dictionary.
         
         Args:
             data: Dictionary from pre_file_parser or analisi_profittabilita_parser
             source_file: Source Excel file path
-            parser_type: Type of parser used
+            parser_type: Type of parser used (string or ParserType enum)
             
         Returns:
             IndustrialQuotation instance
         """
+        # Convert string to ParserType if needed
+        if isinstance(parser_type, str):
+            try:
+                parser_type = ParserType(parser_type)
+            except ValueError:
+                # If invalid string, try to match common patterns
+                if 'pre' in parser_type.lower():
+                    parser_type = ParserType.PRE_FILE_PARSER
+                elif 'analisi' in parser_type.lower():
+                    parser_type = ParserType.ANALISI_PROFITTABILITA_PARSER
+                else:
+                    logger.warning(f"Unknown parser_type '{parser_type}', defaulting to None")
+                    parser_type = None
+        
         # Convert the parser dict to our model structure
         quotation_data = {
             'project': data.get('project', {}),

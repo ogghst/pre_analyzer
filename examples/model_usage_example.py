@@ -15,6 +15,8 @@ import os
 import logging
 from pathlib import Path
 
+from models.quotation_models import ParserType
+
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
@@ -176,7 +178,7 @@ def demonstrate_model_validation():
         project=project,
         product_groups=[group],
         totals=totals,
-        parser_type="manual_creation"
+        parser_type=ParserType.PRE_FILE_PARSER  # Manual creation - no parser used
     )
     
     logger.info("Created sample quotation programmatically")

@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from models import IndustrialQuotation, FieldMapper
+from models import IndustrialQuotation, FieldMapper, ParserType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -417,7 +417,7 @@ class PreFileParser:
         quotation = IndustrialQuotation.from_parser_dict(
             converted_data, 
             source_file=self.file_path,
-            parser_type="pre_file_parser"
+            parser_type=ParserType.PRE_FILE_PARSER
         )
         
         logger.info(f"Successfully created IndustrialQuotation model with {quotation.get_summary_stats()['total_items']} items")
