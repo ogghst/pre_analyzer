@@ -1143,8 +1143,11 @@ def main():
     """Application entry point"""
     try:
         
-        locale.setlocale(locale.LC_ALL, 'it_IT.UTF-8')
-        
+        try:
+            locale.setlocale(locale.LC_ALL, 'it_IT.UTF-8')
+        except locale.Error:
+            locale.setlocale(locale.LC_ALL, '') 
+                
         app = ProjectStructureAnalyzer()
         app.run()
     except Exception as e:
