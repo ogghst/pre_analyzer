@@ -400,6 +400,16 @@ class QuotationCategory(BaseModel):
         default_factory=list,
         description="List of individual items belonging to this category"
     )
+    
+    margin_amount: Optional[float] = Field(
+        default=None,
+        description="Margin amount for this category"
+    )
+    
+    margin_percentage: Optional[float] = Field( 
+        default=None,
+        description="Margin percentage for this category"
+    )
 
     @property
     def category_type(self) -> CategoryType:
@@ -415,24 +425,6 @@ class QuotationCategory(BaseModel):
     def calculated_cost_subtotal(self) -> float:
         """Calculate cost subtotal from items"""
         return sum(item.total_cost for item in self.items)
-
-    @property
-    def margin_amount(self) -> float:
-        """Calculate margin amount (offer_price - cost_subtotal)"""
-        if self.offer_price is not None:
-            return self.offer_price - self.cost_subtotal
-        return self.pricelist_subtotal - self.cost_subtotal
-
-    @property
-    def margin_percentage(self) -> float:
-        """Calculate margin percentage based on available pricing"""
-        if self.offer_price is not None and self.offer_price > 0:
-            # Use offer-based margin: margin% = 1 - (cost / offer)
-            return (1 - (self.cost_subtotal / self.offer_price)) * 100
-        elif self.pricelist_subtotal > 0:
-            # Use pricelist-based margin: margin% = (pricelist - cost) / pricelist
-            return ((self.pricelist_subtotal - self.cost_subtotal) / self.pricelist_subtotal) * 100
-        return 0.0
 
     @model_validator(mode='before')
     @classmethod
@@ -451,6 +443,27 @@ class QuotationCategory(BaseModel):
                 values['total_cost'] = values.get('cost_subtotal', 0.0)
         
         return values
+
+"""     @property
+    def margin_amount(self) -> float:
+   
+        if self.offer_price is not None:
+            return self.offer_price - self.cost_subtotal
+        return self.pricelist_subtotal - self.cost_subtotal
+
+    @property
+    def margin_percentage(self) -> float:
+   
+        if self.offer_price is not None and self.offer_price > 0:
+            # Use offer-based margin: margin% = 1 - (cost / offer)
+            return (1 - (self.cost_subtotal / self.offer_price)) * 100
+        elif self.pricelist_subtotal > 0:
+            # Use pricelist-based margin: margin% = (pricelist - cost) / pricelist
+            return ((self.pricelist_subtotal - self.cost_subtotal) / self.pricelist_subtotal) * 100
+        return 0.0 
+"""
+
+
 
 class ProductGroup(BaseModel):
     """

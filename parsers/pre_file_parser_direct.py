@@ -75,6 +75,29 @@ class IdentificationPatterns:
     GROUP_PREFIX = 'TXT-'
     CATEGORY_CODE_LENGTH = 4
     HEADER_CODE = 'COD'
+    MDC_SHEET_PREFIX = 'MDC'
+
+class MDCRows:
+    DATA_START_ROW = 15              # Data starts from row 15
+    HEADER_ROW = 15                  # Headers are in row 15
+    
+class MDCColumns:
+    COD = 1
+    DESCRIPTION = 2
+    DIRECT_COST_EUR = 4
+    PRICELIST_EUR = 5
+    OFFER_EUR = 6
+    SALE_EUR = 7
+    COMMISSION_COST_EUR = 9
+    FINANCIAL_FEE_EUR = 10
+    PROJECT_MANAGEMENT_COST_EUR = 11
+    WARRANTY_FEE_EUR = 12
+    H24_FIRST_YEAR_COST_EUR = 13
+    WASTE_DISPOSAL_COST_EUR = 14
+    DOCUMENTATION_COST_EUR = 15
+    MARGIN_EUR = 16
+    MARGIN_PERCENTAGE = 17
+    
 
 # =============================================================================
 # DIRECT PRE FILE PARSER
@@ -150,6 +173,9 @@ class DirectPreFileParser:
         current_group = None
         current_category = None
         
+        # Extract MDC data
+        self.mdc_data = self.extract_mdc_offer_data()
+        
         # Start from data start row
         for row in range(ExcelRows.DATA_START_ROW, self.ws.max_row + 1):
             # Get cell values
@@ -198,7 +224,28 @@ class DirectPreFileParser:
                     pricelist_subtotal=float(self._safe_decimal(sub_tot_listino_val)),
                     cost_subtotal=float(self._safe_decimal(sub_tot_costo_val)),
                     total_cost=float(self._safe_decimal(tot_costo_val)),
-                    offer_price=float(self._safe_decimal(tot_offer_val)) if tot_offer_val else None
+                    #offer_price=float(self._safe_decimal(tot_offer_val)) if tot_offer_val else None,
+                    offer_price = (
+                        float(self._safe_decimal(
+                            self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.SALE_EUR)
+                        ))
+                        if self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.SALE_EUR) is not None
+                        else None
+                    ),
+                    margin_amount = (
+                        float(self._safe_decimal(
+                            self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.MARGIN_EUR)
+                        ))
+                        if self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.MARGIN_EUR) is not None
+                        else None
+                    ),
+                    margin_percentage = (
+                        float(self._safe_decimal(
+                            self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.MARGIN_PERCENTAGE)
+                        ))
+                        if self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.MARGIN_PERCENTAGE) is not None
+                        else None
+                    )
                 )
                 current_group.categories.append(current_category)
                 logger.info(f"Found category: {cod_val}")
@@ -225,8 +272,122 @@ class DirectPreFileParser:
         # Add the last group if exists
         if current_group:
             product_groups.append(current_group)
+            
+        # add H24 from MDC data
+        # Find H24 MDC data (key starts with '_H24 PRIMO ANNO')
+        h24_key = next((k for k in self.mdc_data if k.startswith('A2ZZ_H24 PRIMO ANNO')), None)
+        if h24_key:
+            h24_data = self.mdc_data[h24_key]
+        # If H24 MDC data is found, create a group and category for it and add to product_groups
+        if h24_key and h24_data:
+            # Create a QuotationItem for H24 if relevant fields exist
+            h24_item = QuotationItem(
+                position="H24",
+                code=str(h24_data.get(MDCColumns.COD, "H24")),
+                description=str(h24_data.get(MDCColumns.DESCRIPTION, "H24 PRIMO ANNO")),
+                quantity=1.0,
+                pricelist_unit_price=float(self._safe_decimal(h24_data.get(MDCColumns.PRICELIST_EUR, 0.0))),
+                pricelist_total_price=float(self._safe_decimal(h24_data.get(MDCColumns.PRICELIST_EUR, 0.0))),
+                unit_cost=float(self._safe_decimal(h24_data.get(MDCColumns.DIRECT_COST_EUR, 0.0))),
+                total_cost=float(self._safe_decimal(h24_data.get(MDCColumns.DIRECT_COST_EUR, 0.0)))
+            )
+
+            # Create a QuotationCategory for H24
+            h24_category = QuotationCategory(
+                category_id="H24",
+                category_code="H24",
+                category_name=str(h24_data.get(MDCColumns.DESCRIPTION, "H24 PRIMO ANNO")),
+                wbe="",
+                pricelist_subtotal=float(self._safe_decimal(h24_data.get(MDCColumns.PRICELIST_EUR, 0.0))),
+                cost_subtotal=float(self._safe_decimal(h24_data.get(MDCColumns.DIRECT_COST_EUR, 0.0))),
+                total_cost=float(self._safe_decimal(h24_data.get(MDCColumns.DIRECT_COST_EUR, 0.0))),
+                offer_price=float(self._safe_decimal(h24_data.get(MDCColumns.SALE_EUR, 0.0))) if h24_data.get(MDCColumns.SALE_EUR) is not None else None,
+                margin_amount=float(self._safe_decimal(h24_data.get(MDCColumns.MARGIN_EUR, 0.0))) if h24_data.get(MDCColumns.MARGIN_EUR) is not None else None,
+                margin_percentage=float(self._safe_decimal(h24_data.get(MDCColumns.MARGIN_PERCENTAGE, 0.0))) if h24_data.get(MDCColumns.MARGIN_PERCENTAGE) is not None else None,
+                items=[h24_item]
+            )
+
+            # Create a ProductGroup for H24
+            h24_group = ProductGroup(
+                group_id="H24",
+                group_name="H24 PRIMO ANNO",
+                quantity=1,
+                categories=[h24_category],
+                total_cost_value=float(self._safe_decimal(h24_data.get(MDCColumns.DIRECT_COST_EUR, 0.0))),
+                total_offer_value=float(self._safe_decimal(h24_data.get(MDCColumns.OFFER_EUR, 0.0))) if h24_data.get(MDCColumns.OFFER_EUR) is not None else None,
+                total_pricelist_value=float(self._safe_decimal(h24_data.get(MDCColumns.PRICELIST_EUR, 0.0))),
+                item_count=1
+            )
+
+            product_groups.append(h24_group)
         
         return product_groups
+    
+    def _find_latest_mdc_sheet(self) -> Optional[str]:
+        """Find the latest MDC sheet in the workbook"""
+        mdc_sheets = [name for name in self.workbook.sheetnames 
+                       if name.startswith(IdentificationPatterns.MDC_SHEET_PREFIX)]
+        
+        if not mdc_sheets:
+            return None
+        
+        # Sort sheets to get the latest one
+        mdc_sheets.sort(reverse=True)
+        return mdc_sheets[0]
+    
+    def extract_mdc_offer_data(self) -> Dict[str, float]:
+        """Extract additional info from MDC sheet if available"""
+        mdc_sheet_name = self._find_latest_mdc_sheet()
+        if not mdc_sheet_name:
+            logger.info("No MDC sheet found")
+            return {}
+        
+        try:
+            mdc_ws = self.workbook[mdc_sheet_name]
+            logger.info(f"Processing MDC sheet: {mdc_sheet_name}")
+            
+            group = ''
+            mdc_data = {}
+            for row in range(MDCRows.DATA_START_ROW, mdc_ws.max_row + 1):
+                
+                cod = mdc_ws.cell(row=row, column=MDCColumns.COD).value
+                description = mdc_ws.cell(row=row, column=MDCColumns.DESCRIPTION).value
+                amt = mdc_ws.cell(row=row, column=MDCColumns.OFFER_EUR).value
+                
+                if description:
+                   
+                    if not cod:
+                        group = description
+                        cod = ''
+                    
+                    key = f"{cod}_{group}_{str(amt)}"
+                    
+                    mdc_data[key] = {
+                        MDCColumns.COD: cod,
+                        MDCColumns.DESCRIPTION: description,
+                        MDCColumns.DIRECT_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.DIRECT_COST_EUR).value,
+                        MDCColumns.PRICELIST_EUR: mdc_ws.cell(row=row, column=MDCColumns.PRICELIST_EUR).value,
+                        MDCColumns.OFFER_EUR: mdc_ws.cell(row=row, column=MDCColumns.OFFER_EUR).value,
+                        MDCColumns.SALE_EUR: mdc_ws.cell(row=row, column=MDCColumns.SALE_EUR).value,
+                        MDCColumns.COMMISSION_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.COMMISSION_COST_EUR).value,
+                        MDCColumns.FINANCIAL_FEE_EUR: mdc_ws.cell(row=row, column=MDCColumns.FINANCIAL_FEE_EUR).value,
+                        MDCColumns.PROJECT_MANAGEMENT_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.PROJECT_MANAGEMENT_COST_EUR).value,
+                        MDCColumns.WARRANTY_FEE_EUR: mdc_ws.cell(row=row, column=MDCColumns.WARRANTY_FEE_EUR).value,
+                        MDCColumns.H24_FIRST_YEAR_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.H24_FIRST_YEAR_COST_EUR).value,
+                        MDCColumns.WASTE_DISPOSAL_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.WASTE_DISPOSAL_COST_EUR).value,
+                        MDCColumns.DOCUMENTATION_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.DOCUMENTATION_COST_EUR).value,
+                        MDCColumns.MARGIN_EUR: mdc_ws.cell(row=row, column=MDCColumns.MARGIN_EUR).value,
+                        MDCColumns.MARGIN_PERCENTAGE: mdc_ws.cell(row=row, column=MDCColumns.MARGIN_PERCENTAGE).value
+                    }
+                    
+                    #logger.debug(f"MDC offer: {description} = €{mdc_data[key][MDCColumns.OFFER_EUR]:,.2f}")
+            
+            logger.info(f"Extracted {len(mdc_data)} offer prices from MDC sheet")
+            return mdc_data
+            
+        except Exception as e:
+            logger.warning(f"Error reading MDC sheet {mdc_sheet_name}: {e}")
+            return {}
     
     def calculate_totals(self, product_groups: List[ProductGroup], parameters: ProjectParameters) -> QuotationTotals:
         """Calculate total costs and fees"""
@@ -240,15 +401,16 @@ class DirectPreFileParser:
         for group in product_groups:
             for category in group.categories:
                 # Use offer_price if available, otherwise pricelist_subtotal
-                category_pricelist  = Decimal(str(category.offer_price)) if category.offer_price is not None else Decimal("0.0")
+                category_pricelist  = Decimal(str(category.pricelist_subtotal)) if category.pricelist_subtotal is not None else Decimal("0.0")
                 category_cost = Decimal(str(category.cost_subtotal)) if category.cost_subtotal is not None else Decimal("0.0")
                 category_offer = Decimal(str(category.offer_price)) if category.offer_price is not None else Decimal("0.0")
+                category_margin_amount = Decimal(str(category.margin_amount)) if category.margin_amount is not None else Decimal("0.0")
 
                 total_pricelist += category_pricelist
                 total_cost += category_cost
                 total_offer += category_offer
-                offer_margin = total_offer - total_cost
-                offer_margin_percentage = (offer_margin / total_cost) * 100
+                offer_margin += category_margin_amount
+                offer_margin_percentage = (total_offer - total_cost) / total_cost * 100
         
         return QuotationTotals(
             total_pricelist=float(self._round_decimal(total_pricelist)),
@@ -282,6 +444,14 @@ class DirectPreFileParser:
         return quotation
     
     # Helper methods
+    def _safe_cell_value(self, row: int, column: int, default: Any = None) -> Any:
+        """Safely extract cell value by row and column index"""
+        try:
+            cell_value = self.ws.cell(row=row, column=column).value
+            return cell_value if cell_value is not None else default
+        except Exception:
+            return default
+        
     def _safe_decimal(self, value: Any, default: Decimal = None) -> Decimal:
         """Safely convert value to Decimal"""
         if value is None or value == "":
