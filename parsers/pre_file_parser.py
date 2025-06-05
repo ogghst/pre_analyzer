@@ -9,6 +9,12 @@ from typing import Dict, List, Optional, Any
 import pandas as pd
 from openpyxl import load_workbook
 
+# Import unified models and field mappings
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from models import IndustrialQuotation, FieldMapper
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -55,15 +61,15 @@ class IdentificationPatterns:
     HEADER_CODE = 'COD'
 # Project Information Cell Positions (row, column)
 class ProjectInfoCells:
-    PROJECT_ID = (1, 4)  # Row 1, Column D
-    CUSTOMER = (2, 4)    # Row 2, Column D
-    DOC_PERCENTAGE = (7, 4)     # Row 7, Column D
-    PM_PERCENTAGE = (8, 4)      # Row 8, Column D
-    FINANCIAL_COSTS = (9, 4)    # Row 9, Column D
-    CURRENCY = (11, 4)          # Row 11, Column D
-    EXCHANGE_RATE = (12, 4)     # Row 12, Column D
-    WASTE_DISPOSAL = (13, 4)    # Row 13, Column D
-    WARRANTY_PERCENTAGE = (14, 4) # Row 14, Column D
+    PROJECT_ID = (1, 1)  # Row 1, Column A
+    CUSTOMER = (3, 7)    # Row 3, Column G
+    DOC_PERCENTAGE = (8, 2)     # Row 8, Column B
+    PM_PERCENTAGE = (9, 2)      # Row 8, Column D
+    FINANCIAL_COSTS = (10, 2)    # Row 9, Column D
+    CURRENCY = (11, 2)          # Row 11, Column D
+    EXCHANGE_RATE = (12, 2)     # Row 12, Column D
+    WASTE_DISPOSAL = (13, 2)    # Row 13, Column D
+    WARRANTY_PERCENTAGE = (8, 11) # Row 14, Column D
 
 # JSON Field Names
 class JsonFields:
@@ -392,6 +398,31 @@ class PreFileParser:
         logger.info(LogMessages.PARSING_COMPLETED.format(len(product_groups)))
         return result
     
+    def parse_to_model(self) -> IndustrialQuotation:
+        """
+        Parse Excel file directly to IndustrialQuotation model with validation
+        
+        Returns:
+            IndustrialQuotation: Validated quotation model instance
+        """
+        logger.info(f"Parsing PRE file to IndustrialQuotation model: {self.file_path}")
+        
+        # Get raw parser data
+        raw_data = self.parse()
+        
+        # Convert to unified model format using field mapper
+        converted_data = FieldMapper.convert_pre_parser_dict(raw_data)
+        
+        # Create and validate model instance
+        quotation = IndustrialQuotation.from_parser_dict(
+            converted_data, 
+            source_file=self.file_path,
+            parser_type="pre_file_parser"
+        )
+        
+        logger.info(f"Successfully created IndustrialQuotation model with {quotation.get_summary_stats()['total_items']} items")
+        return quotation
+    
     def _safe_float(self, value: Any, default: float = CalculationConstants.DEFAULT_FLOAT) -> float:
         """Safely convert value to float"""
         if value is None:
@@ -440,6 +471,25 @@ def parse_pre_to_json(file_path: str, output_path: Optional[str] = None) -> Dict
         logger.info(LogMessages.JSON_SAVED.format(output_path))
     
     return result
+
+def parse_pre_to_model(file_path: str, output_path: Optional[str] = None) -> IndustrialQuotation:
+    """
+    Main function to parse Excel file to IndustrialQuotation model with validation
+    
+    Args:
+        file_path: Path to the Excel file
+        output_path: Optional path to save JSON output using model serialization
+        
+    Returns:
+        IndustrialQuotation: Validated quotation model instance
+    """
+    parser = PreFileParser(file_path)
+    quotation = parser.parse_to_model()
+    
+    if output_path:
+        quotation.save_json(output_path)
+    
+    return quotation
 
 
 if __name__ == "__main__":

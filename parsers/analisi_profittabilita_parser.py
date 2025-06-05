@@ -9,6 +9,12 @@ from typing import Dict, List, Optional, Any
 import pandas as pd
 from openpyxl import load_workbook
 
+# Import unified models and field mappings
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from models import IndustrialQuotation, FieldMapper
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -663,6 +669,31 @@ class AnalisiProfittabilitaParser:
         logger.info(LogMessages.PARSING_COMPLETED.format(len(product_groups)))
         return result
     
+    def parse_to_model(self) -> IndustrialQuotation:
+        """
+        Parse Excel file directly to IndustrialQuotation model with validation
+        
+        Returns:
+            IndustrialQuotation: Validated quotation model instance
+        """
+        logger.info(f"Parsing Analisi Profittabilita file to IndustrialQuotation model: {self.file_path}")
+        
+        # Get raw parser data
+        raw_data = self.parse()
+        
+        # Convert to unified model format using field mapper
+        converted_data = FieldMapper.convert_ap_parser_dict(raw_data)
+        
+        # Create and validate model instance
+        quotation = IndustrialQuotation.from_parser_dict(
+            converted_data,
+            source_file=self.file_path,
+            parser_type="analisi_profittabilita_parser"
+        )
+        
+        logger.info(f"Successfully created IndustrialQuotation model with {quotation.get_summary_stats()['total_items']} items")
+        return quotation
+    
     def _safe_float(self, value: Any, default: float = CalculationConstants.DEFAULT_FLOAT) -> float:
         """Safely convert value to float"""
         if value is None:
@@ -1214,6 +1245,25 @@ def parse_analisi_profittabilita_to_json(file_path: str, output_path: Optional[s
         logger.info(LogMessages.JSON_SAVED.format(output_path))
     
     return result
+
+def parse_analisi_profittabilita_to_model(file_path: str, output_path: Optional[str] = None) -> IndustrialQuotation:
+    """
+    Main function to parse Analisi Profittabilita Excel file to IndustrialQuotation model with validation
+    
+    Args:
+        file_path: Path to the Excel file
+        output_path: Optional path to save JSON output using model serialization
+        
+    Returns:
+        IndustrialQuotation: Validated quotation model instance
+    """
+    parser = AnalisiProfittabilitaParser(file_path)
+    quotation = parser.parse_to_model()
+    
+    if output_path:
+        quotation.save_json(output_path)
+    
+    return quotation
 
 
 if __name__ == "__main__":

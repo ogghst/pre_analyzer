@@ -12,3 +12,4 @@ temp/
 test/
 test_data/
 src/
+htmlcov/
