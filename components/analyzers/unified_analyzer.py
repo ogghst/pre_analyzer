@@ -19,6 +19,9 @@ from models.quotation_models import IndustrialQuotation, ParserType
 # Import field constants
 from ..field_constants import JsonFields, DisplayFields
 
+# Import formatters
+from utils.format import safe_format_number, safe_format_currency, safe_format_percentage
+
 
 class UnifiedAnalyzer:
     """Unified analyzer that works directly with IndustrialQuotation objects"""
@@ -65,99 +68,40 @@ class UnifiedAnalyzer:
         st.info(f"🔍 **Detected File Type:** {file_type_display}")
         
         # Create columns for metrics
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric("Project ID", self.project.id or 'N/A')
-            if self.detected_file_type == 'analisi_profittabilita':
-                listino = getattr(self.project, 'listino', None)
-                st.metric("Listino", listino or 'N/A')
+            st.metric("Project Name", self.project.customer or 'N/A')
+            st.metric("Project Listino", self.project.listino or 'N/A')
             
         with col2:
-            currency = self.project.parameters.currency if self.project.parameters else 'EUR'
-            exchange_rate = self.project.parameters.exchange_rate if self.project.parameters else 1.0
-            st.metric("Currency", currency)
-            st.metric("Exchange Rate", f"{exchange_rate:.2f}")
+            st.metric("Area Manager", self.project.sales_info.area_manager or 'N/A')
+            st.metric("Author", self.project.sales_info.author or 'N/A')
+            st.metric("Agent", self.project.sales_info.agent or 'N/A')
             
         with col3:
-            st.metric("Product Groups", len(self.product_groups))
+            st.metric("Groups", len(self.product_groups))
+            st.metric("Categories", sum(len(group.categories) for group in self.product_groups))
             total_items = sum(len(category.items) for group in self.product_groups for category in group.categories)
-            st.metric("Total Items", total_items)
+            st.metric("Items", total_items)
             
-        with col4:
-            # Show appropriate margin based on file type
-            if self.detected_file_type == 'analisi_profittabilita':
-                total_offer = getattr(self.totals, 'total_offer', 0) or 0
-                if total_offer > 0:
-                    offer_margin_perc = getattr(self.totals, 'offer_margin_percentage', 0) or 0
-                    st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%")
-                else:
-                    margin_perc = getattr(self.totals, 'margin_percentage', 0) or 0
-                    st.metric("Listino Margin %", f"{margin_perc:.2f}%")
-            else:
-                margin_perc = getattr(self.totals, 'margin_percentage', 0) or 0
-                st.metric("Margin %", f"{margin_perc:.2f}%")
-            
-            items_with_data = self._count_items_with_data()
-            st.metric("Items with Data", items_with_data)
-        
         # Financial summary
         st.subheader("💰 Financial Summary")
+
+        # Show extended layout with offer data
+        fin_col1, fin_col2, fin_col3, fin_col4, fin_col5 = st.columns(5)
         
-        # Determine layout based on file type and available data
-        if self.detected_file_type == 'analisi_profittabilita':
-            total_offer = getattr(self.totals, 'total_offer', 0) or 0
-            
-            if total_offer > 0:
-                # Show extended layout with offer data
-                fin_col1, fin_col2, fin_col3, fin_col4, fin_col5 = st.columns(5)
-                
-                with fin_col1:
-                    total_pricelist = getattr(self.totals, 'total_pricelist', 0) or 0
-                    st.metric("Total Listino", f"€{total_pricelist:,.2f}")
-                with fin_col2:
-                    total_cost = getattr(self.totals, 'total_cost', 0) or 0
-                    st.metric("Total Cost", f"€{total_cost:,.2f}")
-                with fin_col3:
-                    st.metric("Total Offer (VA21)", f"€{total_offer:,.2f}")
-                with fin_col4:
-                    offer_margin = getattr(self.totals, 'offer_margin', 0) or 0
-                    st.metric("Offer Margin", f"€{offer_margin:,.2f}")
-                with fin_col5:
-                    offer_margin_perc = getattr(self.totals, 'offer_margin_percentage', 0) or 0
-                    st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%", delta=f"{offer_margin_perc - 20:.1f}%")
-            else:
-                # Show basic layout without offer data
-                fin_col1, fin_col2, fin_col3, fin_col4 = st.columns(4)
-                
-                with fin_col1:
-                    total_pricelist = getattr(self.totals, 'total_pricelist', 0) or 0
-                    st.metric("Total Listino", f"€{total_pricelist:,.2f}")
-                with fin_col2:
-                    total_cost = getattr(self.totals, 'total_cost', 0) or 0
-                    st.metric("Total Cost", f"€{total_cost:,.2f}")
-                with fin_col3:
-                    margin = total_pricelist - total_cost
-                    st.metric("Listino Margin", f"€{margin:,.2f}")
-                with fin_col4:
-                    margin_perc = (margin / total_pricelist * 100) if total_pricelist > 0 else 0
-                    st.metric("Listino Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
-        else:
-            # PRE file layout
-            fin_col1, fin_col2, fin_col3, fin_col4 = st.columns(4)
-            
-            with fin_col1:
-                total_pricelist = getattr(self.totals, 'total_pricelist', 0) or 0
-                st.metric("Total Amount", f"€{total_pricelist:,.2f}")
-            with fin_col2:
-                total_cost = getattr(self.totals, 'total_cost', 0) or 0
-                st.metric("Total Cost", f"€{total_cost:,.2f}")
-            with fin_col3:
-                offer_margin = getattr(self.totals, 'offer_margin', 0) or 0
-                st.metric("Margin", f"€{offer_margin:,.2f}")
-            with fin_col4:
-                offer_margin_perc = getattr(self.totals, 'offer_margin_percentage', 0) or 0
-                st.metric("Margin %", f"{offer_margin_perc:.2f}%", delta=f"{offer_margin_perc - 20:.1f}%")
+        with fin_col1:
+            st.metric("Total Listino", safe_format_currency(self.totals.total_pricelist))
+        with fin_col2:
+            st.metric("Total Cost", safe_format_currency(self.totals.total_cost))
+        with fin_col3:
+            st.metric("Total Offer", safe_format_currency(self.totals.total_offer))
+        with fin_col4:
+            st.metric("Offer Margin", safe_format_currency(self.totals.offer_margin))
+        with fin_col5:
+            st.metric("Offer Margin %", safe_format_percentage(self.totals.offer_margin_percentage))
     
     def display_profitability_analysis(self):
         """Display comprehensive profitability analysis"""
@@ -274,7 +218,32 @@ class UnifiedAnalyzer:
         if not df_groups.empty:
             # Group profitability table
             st.subheader("📋 Group Profitability Table")
-            st.dataframe(df_groups, use_container_width=True)
+            
+            # Configure column formats
+            column_config = {
+                "Total (€)": st.column_config.NumberColumn(
+                    "Total (€)",
+                    format="€%.0f",
+                    help="Total value for this group"
+                ),
+                "Cost (€)": st.column_config.NumberColumn(
+                    "Cost (€)", 
+                    format="€%.0f",
+                    help="Total cost for this group"
+                ),
+                "Margin (€)": st.column_config.NumberColumn(
+                    "Margin (€)",
+                    format="€%.0f", 
+                    help="Profit margin for this group"
+                ),
+                "Margin (%)": st.column_config.NumberColumn(
+                    "Margin (%)",
+                    format="%.2f%%",
+                    help="Profit margin percentage"
+                )
+            }
+            
+            st.dataframe(df_groups, use_container_width=True, column_config=column_config)
             
             # Group profitability chart
             fig_bar = go.Figure()
@@ -434,9 +403,37 @@ class UnifiedAnalyzer:
             if not significant_utm.empty:
                 display_cols = [DisplayFields.GROUP_ID, DisplayFields.ITEM_CODE, DisplayFields.ITEM_DESCRIPTION, 
                               'Total UTM Value', 'Total Hours', 'UTM Robot', 'UTM LGV', 'PM Cost']
-                st.dataframe(significant_utm[display_cols], use_container_width=True)
-            else:
-                st.info("No significant UTM values found in the data.")
+                
+                # Configure column formats for UTM table
+                utm_column_config = {
+                    'Total UTM Value': st.column_config.NumberColumn(
+                        "Total UTM Value",
+                        format="€{:,.0f}",
+                        help="Total UTM value for this item"
+                    ),
+                    'Total Hours': st.column_config.NumberColumn(
+                        "Total Hours",
+                        format="%.1f",
+                        help="Total hours allocated to this item"
+                    ),
+                    'UTM Robot': st.column_config.NumberColumn(
+                        "UTM Robot",
+                        format="€{:,.0f}",
+                        help="Robot engineering costs"
+                    ),
+                    'UTM LGV': st.column_config.NumberColumn(
+                        "UTM LGV", 
+                        format="€{:,.0f}",
+                        help="LGV engineering costs"
+                    ),
+                    'PM Cost': st.column_config.NumberColumn(
+                        "PM Cost",
+                        format="€{:,.0f}",
+                        help="Project management costs"
+                    )
+                }
+                
+                st.dataframe(significant_utm[display_cols], use_container_width=True, column_config=utm_column_config)
         else:
             st.info("No UTM data found in the current dataset.")
     
@@ -529,7 +526,40 @@ class UnifiedAnalyzer:
         df_wbe_summary = pd.DataFrame(wbe_summary)
         
         # Display WBE summary table
-        st.dataframe(df_wbe_summary, use_container_width=True)
+        wbe_summary_column_config = {
+            DisplayFields.CATEGORIES: st.column_config.NumberColumn(
+                "Categories",
+                format="%.0f",
+                help="Number of categories in this WBE"
+            ),
+            DisplayFields.ITEMS: st.column_config.NumberColumn(
+                "Items",
+                format="%.0f", 
+                help="Number of items in this WBE"
+            ),
+            DisplayFields.LISTINO_EUR: st.column_config.NumberColumn(
+                "Listino (€)",
+                format="€{:,.0f}",
+                help="Total listino value for this WBE"
+            ),
+            DisplayFields.COSTO_EUR: st.column_config.NumberColumn(
+                "Cost (€)",
+                format="€{:,.0f}",
+                help="Total cost for this WBE"
+            ),
+            DisplayFields.MARGIN_EUR: st.column_config.NumberColumn(
+                "Margin (€)",
+                format="€{:,.0f}",
+                help="Profit margin for this WBE"
+            ),
+            DisplayFields.MARGIN_PERCENT: st.column_config.NumberColumn(
+                "Margin (%)",
+                format="%.2f%%",
+                help="Profit margin percentage"
+            )
+        }
+        
+        st.dataframe(df_wbe_summary, use_container_width=True, column_config=wbe_summary_column_config)
         
         # WBE selection dropdown
         selected_wbe = st.selectbox(
@@ -615,7 +645,41 @@ class UnifiedAnalyzer:
         df_categories = pd.DataFrame(cat_data)
         
         if not df_categories.empty:
-            st.dataframe(df_categories, use_container_width=True)
+            # Configure column formats for WBE categories table
+            wbe_categories_column_config = {
+                'Items': st.column_config.NumberColumn(
+                    "Items",
+                    format="%.0f",
+                    help="Number of items in this category"
+                ),
+                'Listino (€)': st.column_config.NumberColumn(
+                    "Listino (€)",
+                    format="€{:,.0f}",
+                    help="Listino value for this category"
+                ),
+                'Cost (€)': st.column_config.NumberColumn(
+                    "Cost (€)",
+                    format="€{:,.0f}",
+                    help="Cost for this category"
+                ),
+                'Offer (€)': st.column_config.NumberColumn(
+                    "Offer (€)",
+                    format="€{:,.0f}",
+                    help="Offer price for this category"
+                ),
+                'Margin (€)': st.column_config.NumberColumn(
+                    "Margin (€)",
+                    format="€{:,.0f}",
+                    help="Profit margin for this category"
+                ),
+                'Margin %': st.column_config.NumberColumn(
+                    "Margin %",
+                    format="%.2f%%",
+                    help="Profit margin percentage"
+                )
+            }
+            
+            st.dataframe(df_categories, use_container_width=True, column_config=wbe_categories_column_config)
     
     def display_field_analysis(self):
         """Display comprehensive field analysis"""
@@ -704,7 +768,35 @@ class UnifiedAnalyzer:
                 st.plotly_chart(fig_top_value, use_container_width=True)
             
             # Detailed fields table
-            st.dataframe(df_top_fields, use_container_width=True)
+            field_analysis_column_config = {
+                'Items with Data': st.column_config.NumberColumn(
+                    "Items with Data",
+                    format="%.0f",
+                    help="Number of items that have data in this field"
+                ),
+                'Usage %': st.column_config.NumberColumn(
+                    "Usage %",
+                    format="%.2f%%",
+                    help="Percentage of items using this field"
+                ),
+                'Total Value': st.column_config.NumberColumn(
+                    "Total Value",
+                    format="€{:,.0f}",
+                    help="Sum of all values in this field"
+                ),
+                'Average Value': st.column_config.NumberColumn(
+                    "Average Value",
+                    format="€{:,.0f}",
+                    help="Average value for this field"
+                ),
+                'Max Value': st.column_config.NumberColumn(
+                    "Max Value",
+                    format="€{:,.0f}",
+                    help="Maximum value found in this field"
+                )
+            }
+            
+            st.dataframe(df_top_fields, use_container_width=True, column_config=field_analysis_column_config)
         else:
             st.info("No field data found for analysis.")
     
@@ -792,7 +884,13 @@ class UnifiedAnalyzer:
                 'Quantity': getattr(item, 'quantity', 0) or 0
             }
     
-    def _safe_float(self, value: Any, default: float = 0.0) -> float:
+    def _truncate_text(self, text: str, max_length: int = 50) -> str:
+        """Truncate text to specified maximum length"""
+        if isinstance(text, str) and len(text) > max_length:
+            return text[:max_length] + "..."
+        return str(text) if text is not None else ""
+    
+    def _safe_float(self, value, default: float = 0.0) -> float:
         """Safely convert value to float"""
         if value is None:
             return default
@@ -801,14 +899,6 @@ class UnifiedAnalyzer:
         except (ValueError, TypeError):
             return default
     
-    def _truncate_text(self, text: str, max_length: int = 50) -> str:
-        """Truncate text to maximum length"""
-        if not text:
-            return ""
-        if len(text) <= max_length:
-            return text
-        return text[:max_length-3] + "..."
-
     def display_tree_structure(self):
         """Display hierarchical tree structure"""
         st.header("🌳 Hierarchical Structure")
@@ -883,7 +973,32 @@ class UnifiedAnalyzer:
         
         # Display table
         st.subheader("📊 Groups Summary Table")
-        st.dataframe(df_groups, use_container_width=True)
+        
+        # Configure column formats for groups table
+        groups_column_config = {
+            DisplayFields.CATEGORIES_COUNT: st.column_config.NumberColumn(
+                "Categories",
+                format="%.0f",
+                help="Number of categories in this group"
+            ),
+            DisplayFields.TOTAL_ITEMS: st.column_config.NumberColumn(
+                "Total Items",
+                format="%.0f",
+                help="Total number of items in this group"
+            ),
+            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
+                "Total (€)",
+                format="{num:,d}",
+                help="Total value for this group"
+            ),
+            DisplayFields.QUANTITY: st.column_config.NumberColumn(
+                "Quantity",
+                format="%.0f",
+                help="Quantity of this product group"
+            )
+        }
+        
+        st.dataframe(df_groups, use_container_width=True, column_config=groups_column_config)
         
         # Create charts
         col1, col2 = st.columns(2)
@@ -983,7 +1098,50 @@ class UnifiedAnalyzer:
         
         # Display filtered data
         st.subheader("📊 Filtered Categories Table")
-        st.dataframe(filtered_df, use_container_width=True)
+        
+        # Configure column formats for categories table
+        categories_column_config = {
+            DisplayFields.ITEMS_COUNT: st.column_config.NumberColumn(
+                "Items Count",
+                format="%.0f",
+                help="Number of items in this category"
+            ),
+            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
+                "Total (€)",
+                format="€{:,.0f}",
+                help="Total value for this category"
+            )
+        }
+        
+        # Add specific fields configuration based on file type
+        if self.detected_file_type == 'analisi_profittabilita':
+            categories_column_config.update({
+                'Subtotal Listino (€)': st.column_config.NumberColumn(
+                    "Subtotal Listino (€)",
+                    format="€{:,.0f}",
+                    help="Subtotal from listino prices"
+                ),
+                'Subtotal Costo (€)': st.column_config.NumberColumn(
+                    "Subtotal Costo (€)",
+                    format="€{:,.0f}",
+                    help="Subtotal of costs"
+                ),
+                'Total Cost (€)': st.column_config.NumberColumn(
+                    "Total Cost (€)",
+                    format="€{:,.0f}",
+                    help="Total cost for this category"
+                )
+            })
+        else:
+            categories_column_config.update({
+                'Subtotal (€)': st.column_config.NumberColumn(
+                    "Subtotal (€)",
+                    format="€{:,.0f}",
+                    help="Category subtotal"
+                )
+            })
+        
+        st.dataframe(filtered_df, use_container_width=True, column_config=categories_column_config)
         
         # Charts
         col1, col2 = st.columns(2)
@@ -1107,7 +1265,70 @@ class UnifiedAnalyzer:
         
         # Display filtered data
         st.subheader("📊 Top Items Table")
-        st.dataframe(filtered_df, use_container_width=True)
+        
+        # Configure column formats for items table
+        items_column_config = {
+            DisplayFields.QUANTITY: st.column_config.NumberColumn(
+                "Quantity",
+                format="%.0f",
+                help="Quantity of this item"
+            ),
+            DisplayFields.UNIT_PRICE_EUR: st.column_config.NumberColumn(
+                "Unit Price (€)",
+                format="€{:,.0f}",
+                help="Unit price for this item"
+            ),
+            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
+                "Total (€)",
+                format="€{:,.0f}",
+                help="Total value for this item"
+            )
+        }
+        
+        # Add specific fields configuration based on file type
+        if self.detected_file_type == 'analisi_profittabilita':
+            items_column_config.update({
+                'Unit Cost (€)': st.column_config.NumberColumn(
+                    "Unit Cost (€)",
+                    format="€{:,.0f}",
+                    help="Unit cost for this item"
+                ),
+                'Total Cost (€)': st.column_config.NumberColumn(
+                    "Total Cost (€)",
+                    format="€{:,.0f}",
+                    help="Total cost for this item"
+                ),
+                'UTM Robot': st.column_config.NumberColumn(
+                    "UTM Robot",
+                    format="€{:,.0f}",
+                    help="Robot engineering costs"
+                ),
+                'PM Cost': st.column_config.NumberColumn(
+                    "PM Cost",
+                    format="€{:,.0f}",
+                    help="Project management costs"
+                ),
+                'Install': st.column_config.NumberColumn(
+                    "Install",
+                    format="€{:,.0f}",
+                    help="Installation costs"
+                ),
+                'After Sales': st.column_config.NumberColumn(
+                    "After Sales",
+                    format="€%. 0f",
+                    help="After sales service costs"
+                )
+            })
+        else:
+            items_column_config.update({
+                'Cost (€)': st.column_config.NumberColumn(
+                    "Cost (€)",
+                    format="€{:,.0f}",
+                    help="Cost for this item"
+                )
+            })
+        
+        st.dataframe(filtered_df, use_container_width=True, column_config=items_column_config)
         
         # Charts
         col1, col2 = st.columns(2)

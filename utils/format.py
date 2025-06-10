@@ -19,7 +19,6 @@ def safe_float(value: Any, default: float = 0.0) -> float:
     except (ValueError, TypeError):
         return default
 
-
 def safe_format_currency(value: Any, italian_style: bool = False, decimals: int = 0) -> str:
     """
     Safely format a currency value to EUR format with error handling.

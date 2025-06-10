@@ -1,0 +1,23 @@
+[theme]
+# Primary theme colors
+primaryColor = "#00D4FF"  # Bright cyan for interactive elements
+backgroundColor = "#0E1117"  # Dark black background
+secondaryBackgroundColor = "#1C1C1C"  # Slightly lighter for sidebar/containers
+textColor = "#FAFAFA"  # Light text for readability
+
+# Font configuration
+font = "sans serif"  # Clean, professional font
+
+[server]
+# Enable CORS to allow connections from anywhere
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+# Automatically open browser when running
+gatherUsageStats = false
+
+[global]
+# Development mode settings
+developmentMode = false
+logLevel = "info" 

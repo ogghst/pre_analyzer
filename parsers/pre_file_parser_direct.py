@@ -220,6 +220,7 @@ class DirectPreFileParser:
                 current_category = QuotationCategory(
                     category_id=str(cod_val),
                     category_name=str(denominazione_val) if denominazione_val else "",
+                    wbe=codice_val,
                     items=[],
                     pricelist_subtotal=float(self._safe_decimal(sub_tot_listino_val)),
                     cost_subtotal=float(self._safe_decimal(sub_tot_costo_val)),
@@ -410,7 +411,7 @@ class DirectPreFileParser:
                 total_cost += category_cost
                 total_offer += category_offer
                 offer_margin += category_margin_amount
-                offer_margin_percentage = (total_offer - total_cost) / total_cost * 100
+                offer_margin_percentage = offer_margin / total_offer * 100
         
         return QuotationTotals(
             total_pricelist=float(self._round_decimal(total_pricelist)),

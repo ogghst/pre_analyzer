@@ -201,113 +201,209 @@ def render_warning_box(title: str, content: str):
 
 
 def apply_custom_css():
-    """Apply custom CSS styling to the Streamlit app"""
+    """Apply custom CSS styling to the Streamlit app with modern dark theme"""
     st.markdown("""
     <style>
-        /* Main container styling */
-        .main > div {
-            padding-top: 2rem;
+        /* Global font size reduction for professional look */
+        .main .block-container {
+            font-size: 14px;
+            line-height: 1.4;
         }
         
-        /* Metric boxes */
+        /* Main container styling */
+        .main > div {
+            padding-top: 1.5rem;
+        }
+        
+        /* Reduce font sizes across components */
+        .stMarkdown, .stText, .stCaption {
+            font-size: 13px !important;
+        }
+        
+        /* Headers with smaller fonts */
+        h1 { font-size: 1.8rem !important; }
+        h2 { font-size: 1.5rem !important; }
+        h3 { font-size: 1.3rem !important; }
+        h4 { font-size: 1.1rem !important; }
+        
+        /* Metric boxes with dark theme */
         .stMetric {
-            border: 1px solid #e1e5f0;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin: 0.5rem 0;
+            background-color: #1E1E1E;
+            border: 1px solid #333;
+            padding: 0.8rem;
+            border-radius: 8px;
+            margin: 0.4rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .stMetric label {
+            font-size: 12px !important;
+            color: #B0B0B0;
+        }
+        
+        .stMetric div[data-testid="metric-container"] > div {
+            font-size: 18px !important;
+            color: #00D4FF;
         }
         
         /* File upload area */
         .uploadedFile {
-            border: 2px dashed #e1e5f0;
-            border-radius: 0.5rem;
-            padding: 2rem;
+            border: 2px dashed #333;
+            border-radius: 8px;
+            padding: 1.5rem;
             text-align: center;
+            background-color: #1A1A1A;
         }
         
         /* Navigation styling */
         .sidebar .stRadio > div {
-            gap: 0.5rem;
+            gap: 0.3rem;
         }
         
-        /* Tree structure styling */
+        .sidebar .stRadio label {
+            font-size: 13px !important;
+        }
+        
+        /* Tree structure styling with dark theme */
         .tree-item {
-            margin-left: 20px;
-            padding: 5px;
-            border-left: 2px solid #e1e5f0;
+            margin-left: 15px;
+            padding: 3px;
+            border-left: 2px solid #333;
+            font-size: 12px;
         }
         
         .group-header {
-            font-weight: bold;
-            color: #1f77b4;
-            font-size: 1.1em;
+            font-weight: 600;
+            color: #00D4FF;
+            font-size: 14px !important;
         }
         
         .category-header {
-            font-weight: bold;
-            color: #ff7f0e;
-            margin-left: 10px;
+            font-weight: 600;
+            color: #FF6B6B;
+            margin-left: 8px;
+            font-size: 13px !important;
         }
         
         .item-text {
-            color: #2ca02c;
-            margin-left: 20px;
-            font-size: 0.9em;
+            color: #4ECDC4;
+            margin-left: 15px;
+            font-size: 12px !important;
         }
         
-        /* Success/Error message styling */
+        /* Success/Error message styling for dark theme */
         .success-box {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin: 1rem 0;
+            background-color: #1B4332;
+            border: 1px solid #2D6A4F;
+            color: #52B788;
+            padding: 0.8rem;
+            border-radius: 8px;
+            margin: 0.8rem 0;
+            font-size: 13px;
         }
         
         .error-box {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin: 1rem 0;
+            background-color: #641220;
+            border: 1px solid #A4161A;
+            color: #FFB3BA;
+            padding: 0.8rem;
+            border-radius: 8px;
+            margin: 0.8rem 0;
+            font-size: 13px;
         }
         
         /* Chart container improvements */
         .plotly-chart {
-            border: 1px solid #e1e5f0;
-            border-radius: 0.5rem;
+            border: 1px solid #333;
+            border-radius: 8px;
             padding: 0.5rem;
+            background-color: #1A1A1A;
         }
         
-        /* Dataframe styling */
+        /* Dataframe styling for dark theme */
         .dataframe {
-            border: 1px solid #e1e5f0;
-            border-radius: 0.5rem;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background-color: #1A1A1A;
+            font-size: 12px !important;
         }
         
-        /* Sidebar improvements */
-        .sidebar .sidebar-content {
-            background-color: #f8f9fa;
+        /* Dataframe headers */
+        .dataframe th {
+            background-color: #2A2A2A !important;
+            color: #FAFAFA !important;
+            font-size: 12px !important;
+            padding: 6px !important;
         }
         
-        /* Button styling */
+        .dataframe td {
+            background-color: #1A1A1A !important;
+            color: #E0E0E0 !important;
+            font-size: 11px !important;
+            padding: 4px !important;
+        }
+        
+        /* Button styling with modern dark theme */
         .stButton > button {
-            border-radius: 0.5rem;
-            border: 1px solid #dee2e6;
-            transition: all 0.2s;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background-color: #2A2A2A;
+            color: #FAFAFA;
+            font-size: 13px !important;
+            padding: 0.4rem 0.8rem;
+            transition: all 0.2s ease;
         }
         
         .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background-color: #00D4FF;
+            color: #0E1117;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,212,255,0.3);
         }
         
         /* Expander styling */
         .streamlit-expanderHeader {
-            background-color: #f8f9fa;
-            border-radius: 0.5rem;
+            background-color: #2A2A2A;
+            border-radius: 8px;
+            font-size: 14px !important;
+        }
+        
+        /* Selectbox and input styling */
+        .stSelectbox > div > div {
+            background-color: #2A2A2A;
+            border: 1px solid #333;
+            border-radius: 6px;
+            font-size: 13px !important;
+        }
+        
+        .stTextInput > div > div > input {
+            background-color: #2A2A2A;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #FAFAFA;
+            font-size: 13px !important;
+        }
+        
+        /* Progress bar styling */
+        .stProgress > div > div > div {
+            background-color: #00D4FF;
+        }
+        
+        /* Tab styling */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 4px;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            background-color: #2A2A2A;
+            border-radius: 6px;
+            font-size: 13px !important;
+            padding: 6px 12px;
+        }
+        
+        .stTabs [aria-selected="true"] {
+            background-color: #00D4FF;
+            color: #0E1117;
         }
         
         /* Footer styling */
@@ -316,11 +412,56 @@ def apply_custom_css():
             left: 0;
             bottom: 0;
             width: 100%;
-            background-color: #f8f9fa;
-            color: #6c757d;
+            background-color: #1A1A1A;
+            color: #808080;
             text-align: center;
-            padding: 10px;
-            font-size: 12px;
+            padding: 8px;
+            font-size: 11px;
+            border-top: 1px solid #333;
+        }
+        
+        /* Sidebar enhancements */
+        .css-1d391kg {
+            background-color: #1C1C1C;
+        }
+        
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1A1A1A;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00D4FF;
+        }
+        
+        /* Alert styling for dark theme */
+        .stAlert {
+            font-size: 13px !important;
+        }
+        
+        /* Code block styling */
+        .stCode {
+            background-color: #1A1A1A !important;
+            border: 1px solid #333 !important;
+            font-size: 12px !important;
+        }
+        
+        /* Table alternating row colors */
+        .stDataFrame tbody tr:nth-child(even) {
+            background-color: #1E1E1E !important;
+        }
+        
+        .stDataFrame tbody tr:nth-child(odd) {
+            background-color: #1A1A1A !important;
         }
     </style>
     """, unsafe_allow_html=True)

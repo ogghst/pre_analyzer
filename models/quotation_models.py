@@ -198,29 +198,29 @@ class QuotationItem(BaseModel):
     # Quantity and pricing fields
     quantity: float = Field(
         default=1.0,
-        ge=0.0,
+        #ge=0.0,
         description="Quantity of items (pieces, hours, etc.)"
     )
     pricelist_unit_price: float = Field(
         default=0.0,
-        ge=0.0,
+        #ge=0.0,
         description="Unit price from the official price list"
     )
     pricelist_total_price: float = Field(
         default=0.0,
-        ge=0.0,
+        #ge=0.0,
         description="Total price from price list (quantity × unit price)"
     )
     
     # Cost fields
     unit_cost: float = Field(
         default=0.0,
-        ge=0.0,
+        #ge=0.0,
         description="Internal unit cost for this item"
     )
     total_cost: float = Field(
         default=0.0,
-        ge=0.0,
+        #ge=0.0,
         description="Total internal cost (quantity × unit cost)"
     )
     
@@ -251,88 +251,88 @@ class QuotationItem(BaseModel):
     )
     
     # Material and Robot Engineering fields (UTM = Ufficio Tecnico Meccanico)
-    mat: float = Field(default=0.0, ge=0.0, description="Material costs allocated to this item")
-    utm_robot: float = Field(default=0.0, ge=0.0, description="Robot engineering costs (UTM)")
-    utm_robot_h: float = Field(default=0.0, ge=0.0, description="Robot engineering hours (UTM)")
-    utm_lgv: float = Field(default=0.0, ge=0.0, description="LGV (Laser Guided Vehicle) engineering costs")
-    utm_lgv_h: float = Field(default=0.0, ge=0.0, description="LGV engineering hours")
-    utm_intra: float = Field(default=0.0, ge=0.0, description="Intralogistics engineering costs")
-    utm_intra_h: float = Field(default=0.0, ge=0.0, description="Intralogistics engineering hours")
-    utm_layout: float = Field(default=0.0, ge=0.0, description="Layout design engineering costs")
-    utm_layout_h: float = Field(default=0.0, ge=0.0, description="Layout design engineering hours")
+    mat: float = Field(default=0.0,  description="Material costs allocated to this item")
+    utm_robot: float = Field(default=0.0,  description="Robot engineering costs (UTM)")
+    utm_robot_h: float = Field(default=0.0,  description="Robot engineering hours (UTM)")
+    utm_lgv: float = Field(default=0.0,  description="LGV (Laser Guided Vehicle) engineering costs")
+    utm_lgv_h: float = Field(default=0.0,  description="LGV engineering hours")
+    utm_intra: float = Field(default=0.0,  description="Intralogistics engineering costs")
+    utm_intra_h: float = Field(default=0.0,  description="Intralogistics engineering hours")
+    utm_layout: float = Field(default=0.0,  description="Layout design engineering costs")
+    utm_layout_h: float = Field(default=0.0,  description="Layout design engineering hours")
     
     # Technical Engineering fields (UTE = Ufficio Tecnico Elettrico)
-    ute: float = Field(default=0.0, ge=0.0, description="Electrical engineering costs (UTE)")
-    ute_h: float = Field(default=0.0, ge=0.0, description="Electrical engineering hours (UTE)")
-    ba: float = Field(default=0.0, ge=0.0, description="Business Analysis costs")
-    ba_h: float = Field(default=0.0, ge=0.0, description="Business Analysis hours")
+    ute: float = Field(default=0.0,  description="Electrical engineering costs (UTE)")
+    ute_h: float = Field(default=0.0,  description="Electrical engineering hours (UTE)")
+    ba: float = Field(default=0.0,  description="Business Analysis costs")
+    ba_h: float = Field(default=0.0,  description="Business Analysis hours")
     
     # Software Development fields
-    sw_pc: float = Field(default=0.0, ge=0.0, description="PC software development costs")
-    sw_pc_h: float = Field(default=0.0, ge=0.0, description="PC software development hours")
-    sw_plc: float = Field(default=0.0, ge=0.0, description="PLC software development costs")
-    sw_plc_h: float = Field(default=0.0, ge=0.0, description="PLC software development hours")
-    sw_lgv: float = Field(default=0.0, ge=0.0, description="LGV software development costs")
-    sw_lgv_h: float = Field(default=0.0, ge=0.0, description="LGV software development hours")
+    sw_pc: float = Field(default=0.0,  description="PC software development costs")
+    sw_pc_h: float = Field(default=0.0,  description="PC software development hours")
+    sw_plc: float = Field(default=0.0,  description="PLC software development costs")
+    sw_plc_h: float = Field(default=0.0,  description="PLC software development hours")
+    sw_lgv: float = Field(default=0.0,  description="LGV software development costs")
+    sw_lgv_h: float = Field(default=0.0,  description="LGV software development hours")
     
     # Manufacturing fields (MTG = Montaggio)
-    mtg_mec: float = Field(default=0.0, ge=0.0, description="Mechanical assembly costs")
-    mtg_mec_h: float = Field(default=0.0, ge=0.0, description="Mechanical assembly hours")
-    mtg_mec_intra: float = Field(default=0.0, ge=0.0, description="Intralogistics mechanical assembly costs")
-    mtg_mec_intra_h: float = Field(default=0.0, ge=0.0, description="Intralogistics mechanical assembly hours")
-    cab_ele: float = Field(default=0.0, ge=0.0, description="Electrical cabinet assembly costs")
-    cab_ele_h: float = Field(default=0.0, ge=0.0, description="Electrical cabinet assembly hours")
-    cab_ele_intra: float = Field(default=0.0, ge=0.0, description="Intralogistics electrical cabinet costs")
-    cab_ele_intra_h: float = Field(default=0.0, ge=0.0, description="Intralogistics electrical cabinet hours")
+    mtg_mec: float = Field(default=0.0,  description="Mechanical assembly costs")
+    mtg_mec_h: float = Field(default=0.0,  description="Mechanical assembly hours")
+    mtg_mec_intra: float = Field(default=0.0,  description="Intralogistics mechanical assembly costs")
+    mtg_mec_intra_h: float = Field(default=0.0,  description="Intralogistics mechanical assembly hours")
+    cab_ele: float = Field(default=0.0,  description="Electrical cabinet assembly costs")
+    cab_ele_h: float = Field(default=0.0,  description="Electrical cabinet assembly hours")
+    cab_ele_intra: float = Field(default=0.0,  description="Intralogistics electrical cabinet costs")
+    cab_ele_intra_h: float = Field(default=0.0,  description="Intralogistics electrical cabinet hours")
     
     # Testing and Commissioning fields (COLL = Collaudo)
-    coll_ba: float = Field(default=0.0, ge=0.0, description="Business Analysis testing costs")
-    coll_ba_h: float = Field(default=0.0, ge=0.0, description="Business Analysis testing hours")
-    coll_pc: float = Field(default=0.0, ge=0.0, description="PC software testing costs")
-    coll_pc_h: float = Field(default=0.0, ge=0.0, description="PC software testing hours")
-    coll_plc: float = Field(default=0.0, ge=0.0, description="PLC software testing costs")
-    coll_plc_h: float = Field(default=0.0, ge=0.0, description="PLC software testing hours")
-    coll_lgv: float = Field(default=0.0, ge=0.0, description="LGV system testing costs")
-    coll_lgv_h: float = Field(default=0.0, ge=0.0, description="LGV system testing hours")
+    coll_ba: float = Field(default=0.0,  description="Business Analysis testing costs")
+    coll_ba_h: float = Field(default=0.0,  description="Business Analysis testing hours")
+    coll_pc: float = Field(default=0.0,  description="PC software testing costs")
+    coll_pc_h: float = Field(default=0.0,  description="PC software testing hours")
+    coll_plc: float = Field(default=0.0,  description="PLC software testing costs")
+    coll_plc_h: float = Field(default=0.0,  description="PLC software testing hours")
+    coll_lgv: float = Field(default=0.0,  description="LGV system testing costs")
+    coll_lgv_h: float = Field(default=0.0,  description="LGV system testing hours")
     
     # Project Management fields
-    pm_cost: float = Field(default=0.0, ge=0.0, description="Project management costs allocated to this item")
-    pm_h: float = Field(default=0.0, ge=0.0, description="Project management hours allocated to this item")
-    spese_pm: float = Field(default=0.0, ge=0.0, description="Project management expenses (travel, etc.)")
+    pm_cost: float = Field(default=0.0,  description="Project management costs allocated to this item")
+    pm_h: float = Field(default=0.0,  description="Project management hours allocated to this item")
+    spese_pm: float = Field(default=0.0,  description="Project management expenses (travel, etc.)")
     
     # Documentation fields
-    document: float = Field(default=0.0, ge=0.0, description="Documentation preparation costs")
-    document_h: float = Field(default=0.0, ge=0.0, description="Documentation preparation hours")
+    document: float = Field(default=0.0,  description="Documentation preparation costs")
+    document_h: float = Field(default=0.0,  description="Documentation preparation hours")
     
     # Logistics fields
-    imballo: float = Field(default=0.0, ge=0.0, description="Packaging costs")
-    stoccaggio: float = Field(default=0.0, ge=0.0, description="Storage and warehousing costs")
-    trasporto: float = Field(default=0.0, ge=0.0, description="Transportation and shipping costs")
+    imballo: float = Field(default=0.0,  description="Packaging costs")
+    stoccaggio: float = Field(default=0.0,  description="Storage and warehousing costs")
+    trasporto: float = Field(default=0.0,  description="Transportation and shipping costs")
     
     # Field Installation fields
-    site: float = Field(default=0.0, ge=0.0, description="On-site work costs")
-    site_h: float = Field(default=0.0, ge=0.0, description="On-site work hours")
-    install: float = Field(default=0.0, ge=0.0, description="Installation costs")
-    install_h: float = Field(default=0.0, ge=0.0, description="Installation hours")
+    site: float = Field(default=0.0,  description="On-site work costs")
+    site_h: float = Field(default=0.0,  description="On-site work hours")
+    install: float = Field(default=0.0,  description="Installation costs")
+    install_h: float = Field(default=0.0,  description="Installation hours")
     
     # Field Commissioning fields (AV = Avviamento)
-    av_pc: float = Field(default=0.0, ge=0.0, description="PC system commissioning costs")
-    av_pc_h: float = Field(default=0.0, ge=0.0, description="PC system commissioning hours")
-    av_plc: float = Field(default=0.0, ge=0.0, description="PLC system commissioning costs")
-    av_plc_h: float = Field(default=0.0, ge=0.0, description="PLC system commissioning hours")
-    av_lgv: float = Field(default=0.0, ge=0.0, description="LGV system commissioning costs")
-    av_lgv_h: float = Field(default=0.0, ge=0.0, description="LGV system commissioning hours")
+    av_pc: float = Field(default=0.0,  description="PC system commissioning costs")
+    av_pc_h: float = Field(default=0.0,  description="PC system commissioning hours")
+    av_plc: float = Field(default=0.0,  description="PLC system commissioning costs")
+    av_plc_h: float = Field(default=0.0,  description="PLC system commissioning hours")
+    av_lgv: float = Field(default=0.0,  description="LGV system commissioning costs")
+    av_lgv_h: float = Field(default=0.0,  description="LGV system commissioning hours")
     
     # Additional cost fields
-    spese_field: float = Field(default=0.0, ge=0.0, description="Field work expenses (travel, accommodation)")
-    spese_varie: float = Field(default=0.0, ge=0.0, description="Miscellaneous expenses")
-    after_sales: float = Field(default=0.0, ge=0.0, description="After-sales service costs")
+    spese_field: float = Field(default=0.0,  description="Field work expenses (travel, accommodation)")
+    spese_varie: float = Field(default=0.0,  description="Miscellaneous expenses")
+    after_sales: float = Field(default=0.0,  description="After-sales service costs")
     
     # Commission fields
-    provvigioni_italia: float = Field(default=0.0, ge=0.0, description="Sales commissions for Italian market")
-    provvigioni_estero: float = Field(default=0.0, ge=0.0, description="Sales commissions for international market")
-    tesoretto: float = Field(default=0.0, ge=0.0, description="Special reserve or contingency fund")
-    montaggio_bema_mbe_us: float = Field(default=0.0, ge=0.0, description="BEMA MBE-US assembly costs")
+    provvigioni_italia: float = Field(default=0.0,  description="Sales commissions for Italian market")
+    provvigioni_estero: float = Field(default=0.0,  description="Sales commissions for international market")
+    tesoretto: float = Field(default=0.0,  description="Special reserve or contingency fund")
+    montaggio_bema_mbe_us: float = Field(default=0.0,  description="BEMA MBE-US assembly costs")
 
     @field_validator('pricelist_total_price')
     @classmethod
