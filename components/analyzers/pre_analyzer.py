@@ -167,7 +167,26 @@ class PreAnalyzer(BaseAnalyzer):
             st.plotly_chart(fig_stacked, use_container_width=True)
             
             # Financial summary table
-            st.dataframe(df_group_financial, use_container_width=True)
+            # Configure column formats for financial table
+            financial_column_config = {
+                DisplayFields.EQUIPMENT_EUR: st.column_config.NumberColumn(
+                    "Equipment (€)",
+                    format="localized",
+                    help="Equipment costs for this group"
+                ),
+                DisplayFields.INSTALLATION_EUR: st.column_config.NumberColumn(
+                    "Installation (€)",
+                    format="localized",
+                    help="Installation costs for this group"
+                ),
+                DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
+                    "Total (€)",
+                    format="localized",
+                    help="Total value for this group"
+                )
+            }
+            
+            st.dataframe(df_group_financial, use_container_width=True, column_config=financial_column_config)
         else:
             st.warning("No financial data to display.")
     

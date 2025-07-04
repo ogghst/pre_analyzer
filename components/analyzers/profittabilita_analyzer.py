@@ -227,7 +227,41 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                     df_display[col] = df_display[col].apply(lambda x: f"€{x:,.2f}" if pd.notna(x) and x != 0 else "-")
             df_display['Margin (%)'] = df_display['Margin (%)'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
             
-            st.dataframe(df_display, use_container_width=True)
+            # Configure column formats for WBE profitability table
+            profitability_column_config = {
+                'Categories': st.column_config.NumberColumn(
+                    "Categories",
+                    format="localized",
+                    help="Number of categories in this WBE"
+                ),
+                'Items': st.column_config.NumberColumn(
+                    "Items",
+                    format="localized",
+                    help="Number of items in this WBE"
+                ),
+                'Listino (€)': st.column_config.TextColumn(
+                    "Listino (€)",
+                    help="Total listino value for this WBE"
+                ),
+                'Offer (€)': st.column_config.TextColumn(
+                    "Offer (€)",
+                    help="Total offer price for this WBE"
+                ),
+                'Cost (€)': st.column_config.TextColumn(
+                    "Cost (€)",
+                    help="Total cost for this WBE"
+                ),
+                'Margin (€)': st.column_config.TextColumn(
+                    "Margin (€)",
+                    help="Profit margin for this WBE"
+                ),
+                'Margin (%)': st.column_config.TextColumn(
+                    "Margin (%)",
+                    help="Profit margin percentage"
+                )
+            }
+            
+            st.dataframe(df_display, use_container_width=True, column_config=profitability_column_config)
             
             # 2. Bar Chart: Offer Price vs Cost by WBE
             st.subheader("📊 Offer Price vs Cost by WBE")
@@ -449,7 +483,37 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
             if not significant_utm.empty:
                 display_cols = [DisplayFields.GROUP_ID, DisplayFields.ITEM_CODE, DisplayFields.ITEM_DESCRIPTION, 
                               'Total UTM Value', 'Total Hours', 'UTM Robot', 'UTM LGV', 'PM Cost']
-                st.dataframe(significant_utm[display_cols], use_container_width=True)
+                
+                # Configure column formats for UTM table
+                utm_column_config = {
+                    'Total UTM Value': st.column_config.NumberColumn(
+                        "Total UTM Value",
+                        format="localized",
+                        help="Total UTM value for this item"
+                    ),
+                    'Total Hours': st.column_config.NumberColumn(
+                        "Total Hours",
+                        format="%.1f",
+                        help="Total hours allocated to this item"
+                    ),
+                    'UTM Robot': st.column_config.NumberColumn(
+                        "UTM Robot",
+                        format="localized",
+                        help="Robot engineering costs"
+                    ),
+                    'UTM LGV': st.column_config.NumberColumn(
+                        "UTM LGV",
+                        format="localized",
+                        help="LGV engineering costs"
+                    ),
+                    'PM Cost': st.column_config.NumberColumn(
+                        "PM Cost",
+                        format="localized",  
+                        help="Project management costs"
+                    )
+                }
+                
+                st.dataframe(significant_utm[display_cols], use_container_width=True, column_config=utm_column_config)
             else:
                 st.info("No significant UTM values found in the data.")
         else:
@@ -528,7 +592,41 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
         df_wbe_summary = pd.DataFrame(wbe_summary)
         
         # Display WBE summary table
-        st.dataframe(df_wbe_summary, use_container_width=True)
+        # Configure column formats for WBE summary table
+        wbe_summary_column_config = {
+            DisplayFields.CATEGORIES: st.column_config.NumberColumn(
+                "Categories",
+                format="localized",
+                help="Number of categories in this WBE"
+            ),
+            DisplayFields.ITEMS: st.column_config.NumberColumn(
+                "Items",
+                format="localized",
+                help="Number of items in this WBE"
+            ),
+            DisplayFields.LISTINO_EUR: st.column_config.NumberColumn(
+                "Listino (€)",
+                format="localized",
+                help="Total listino value for this WBE"
+            ),
+            DisplayFields.COSTO_EUR: st.column_config.NumberColumn(
+                "Cost (€)",
+                format="localized",
+                help="Total cost for this WBE"
+            ),
+            DisplayFields.MARGIN_EUR: st.column_config.NumberColumn(
+                "Margin (€)",
+                format="localized",
+                help="Profit margin for this WBE"
+            ),
+            DisplayFields.MARGIN_PERCENT: st.column_config.NumberColumn(
+                "Margin (%)",
+                format="%.2f%%",
+                help="Profit margin percentage"
+            )
+        }
+        
+        st.dataframe(df_wbe_summary, use_container_width=True, column_config=wbe_summary_column_config)
         
         # WBE selection dropdown
         selected_wbe = st.selectbox(

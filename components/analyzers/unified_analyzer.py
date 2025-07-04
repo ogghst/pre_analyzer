@@ -11,6 +11,7 @@ from plotly.subplots import make_subplots
 from typing import Dict, List, Any, Union
 import sys
 import os
+import decimal
 
 # Import IndustrialQuotation model and ParserType enum
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -203,7 +204,10 @@ class UnifiedAnalyzer:
                 group_cost = sum(getattr(item, 'total_cost', 0) or 0 for cat in group.categories for item in cat.items)
             
             group_margin = group_total - group_cost
-            group_margin_perc = (group_margin / group_total * 100) if group_total > 0 else 0
+            try:
+                group_margin_perc = (group_margin / group_total * 100) if group_total > 0 else 0
+            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                group_margin_perc = 0
             
             group_data.append({
                 'Group': group.group_id or 'Unknown',
@@ -336,7 +340,10 @@ class UnifiedAnalyzer:
             with col3:
                 st.metric("Total Hours", f"{df_utm['Total Hours'].sum():,.1f}")
             with col4:
-                avg_hourly = df_utm['Total UTM Value'].sum() / df_utm['Total Hours'].sum() if df_utm['Total Hours'].sum() > 0 else 0
+                try:
+                    avg_hourly = df_utm['Total UTM Value'].sum() / df_utm['Total Hours'].sum() if df_utm['Total Hours'].sum() > 0 else 0
+                except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                    avg_hourly = 0
                 st.metric("Avg €/Hour", f"€{avg_hourly:.2f}")
             
             # UTM breakdown charts
@@ -408,7 +415,7 @@ class UnifiedAnalyzer:
                 utm_column_config = {
                     'Total UTM Value': st.column_config.NumberColumn(
                         "Total UTM Value",
-                        format="€{:,.0f}",
+                        format="localized",
                         help="Total UTM value for this item"
                     ),
                     'Total Hours': st.column_config.NumberColumn(
@@ -418,17 +425,17 @@ class UnifiedAnalyzer:
                     ),
                     'UTM Robot': st.column_config.NumberColumn(
                         "UTM Robot",
-                        format="€{:,.0f}",
+                        format="localized",
                         help="Robot engineering costs"
                     ),
                     'UTM LGV': st.column_config.NumberColumn(
                         "UTM LGV", 
-                        format="€{:,.0f}",
+                        format="localized",
                         help="LGV engineering costs"
                     ),
                     'PM Cost': st.column_config.NumberColumn(
                         "PM Cost",
-                        format="€{:,.0f}",
+                        format="localized",
                         help="Project management costs"
                     )
                 }
@@ -511,7 +518,10 @@ class UnifiedAnalyzer:
         wbe_summary = []
         for wbe, data in wbe_data.items():
             margin = data['total_listino'] - data['total_costo']
-            margin_perc = (margin / data['total_listino'] * 100) if data['total_listino'] > 0 else 0
+            try:
+                margin_perc = (margin / data['total_listino'] * 100) if data['total_listino'] > 0 else 0
+            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                margin_perc = 0
             
             wbe_summary.append({
                 DisplayFields.WBE: wbe,
@@ -529,27 +539,27 @@ class UnifiedAnalyzer:
         wbe_summary_column_config = {
             DisplayFields.CATEGORIES: st.column_config.NumberColumn(
                 "Categories",
-                format="%.0f",
+                format="localized",
                 help="Number of categories in this WBE"
             ),
             DisplayFields.ITEMS: st.column_config.NumberColumn(
                 "Items",
-                format="%.0f", 
+                format="localized", 
                 help="Number of items in this WBE"
             ),
             DisplayFields.LISTINO_EUR: st.column_config.NumberColumn(
                 "Listino (€)",
-                format="€{:,.0f}",
+                format="localized",
                 help="Total listino value for this WBE"
             ),
             DisplayFields.COSTO_EUR: st.column_config.NumberColumn(
                 "Cost (€)",
-                format="€{:,.0f}",
+                format="localized",
                 help="Total cost for this WBE"
             ),
             DisplayFields.MARGIN_EUR: st.column_config.NumberColumn(
                 "Margin (€)",
-                format="€{:,.0f}",
+                format="localized",
                 help="Profit margin for this WBE"
             ),
             DisplayFields.MARGIN_PERCENT: st.column_config.NumberColumn(
@@ -582,12 +592,18 @@ class UnifiedAnalyzer:
         total_costo = wbe_data['total_costo']
         total_offer = wbe_data.get('total_offer', 0)
         margin = total_listino - total_costo
-        margin_perc = (margin / total_listino * 100) if total_listino > 0 else 0
+        try:
+            margin_perc = (margin / total_listino * 100) if total_listino > 0 else 0
+        except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+            margin_perc = 0
         
         # Key metrics
         if total_offer > 0 and self.detected_file_type == 'analisi_profittabilita':
             offer_margin = total_offer - total_costo
-            offer_margin_perc = (1 - (total_costo / total_offer)) * 100 if total_offer > 0 else 0
+            try:
+                offer_margin_perc = (1 - (total_costo / total_offer)) * 100 if total_offer > 0 else 0
+            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                offer_margin_perc = 0
             
             col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
@@ -628,7 +644,10 @@ class UnifiedAnalyzer:
                 cat_offer = 0
             
             cat_margin = cat_listino - cat_costo
-            cat_margin_perc = (cat_margin / cat_listino * 100) if cat_listino > 0 else 0
+            try:
+                cat_margin_perc = (cat_margin / cat_listino * 100) if cat_listino > 0 else 0
+            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                cat_margin_perc = 0
             
             cat_data.append({
                 'Group': cat_info['group_id'],
@@ -649,27 +668,27 @@ class UnifiedAnalyzer:
             wbe_categories_column_config = {
                 'Items': st.column_config.NumberColumn(
                     "Items",
-                    format="%.0f",
+                    format="localized",
                     help="Number of items in this category"
                 ),
                 'Listino (€)': st.column_config.NumberColumn(
                     "Listino (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Listino value for this category"
                 ),
                 'Cost (€)': st.column_config.NumberColumn(
                     "Cost (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Cost for this category"
                 ),
                 'Offer (€)': st.column_config.NumberColumn(
                     "Offer (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Offer price for this category"
                 ),
                 'Margin (€)': st.column_config.NumberColumn(
                     "Margin (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Profit margin for this category"
                 ),
                 'Margin %': st.column_config.NumberColumn(
@@ -771,7 +790,7 @@ class UnifiedAnalyzer:
             field_analysis_column_config = {
                 'Items with Data': st.column_config.NumberColumn(
                     "Items with Data",
-                    format="%.0f",
+                    format="localized",
                     help="Number of items that have data in this field"
                 ),
                 'Usage %': st.column_config.NumberColumn(
@@ -781,17 +800,17 @@ class UnifiedAnalyzer:
                 ),
                 'Total Value': st.column_config.NumberColumn(
                     "Total Value",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Sum of all values in this field"
                 ),
                 'Average Value': st.column_config.NumberColumn(
                     "Average Value",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Average value for this field"
                 ),
                 'Max Value': st.column_config.NumberColumn(
                     "Max Value",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Maximum value found in this field"
                 )
             }
@@ -896,7 +915,7 @@ class UnifiedAnalyzer:
             return default
         try:
             return float(value)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, decimal.DivisionUndefined, decimal.InvalidOperation):
             return default
     
     def display_tree_structure(self):
@@ -978,12 +997,12 @@ class UnifiedAnalyzer:
         groups_column_config = {
             DisplayFields.CATEGORIES_COUNT: st.column_config.NumberColumn(
                 "Categories",
-                format="%.0f",
+                format="localized",
                 help="Number of categories in this group"
             ),
             DisplayFields.TOTAL_ITEMS: st.column_config.NumberColumn(
                 "Total Items",
-                format="%.0f",
+                format="localized",
                 help="Total number of items in this group"
             ),
             DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
@@ -993,7 +1012,7 @@ class UnifiedAnalyzer:
             ),
             DisplayFields.QUANTITY: st.column_config.NumberColumn(
                 "Quantity",
-                format="%.0f",
+                format="localized",
                 help="Quantity of this product group"
             )
         }
@@ -1103,12 +1122,12 @@ class UnifiedAnalyzer:
         categories_column_config = {
             DisplayFields.ITEMS_COUNT: st.column_config.NumberColumn(
                 "Items Count",
-                format="%.0f",
+                format="localized",
                 help="Number of items in this category"
             ),
             DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
                 "Total (€)",
-                format="€{:,.0f}",
+                format="localized",
                 help="Total value for this category"
             )
         }
@@ -1118,17 +1137,17 @@ class UnifiedAnalyzer:
             categories_column_config.update({
                 'Subtotal Listino (€)': st.column_config.NumberColumn(
                     "Subtotal Listino (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Subtotal from listino prices"
                 ),
                 'Subtotal Costo (€)': st.column_config.NumberColumn(
                     "Subtotal Costo (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Subtotal of costs"
                 ),
                 'Total Cost (€)': st.column_config.NumberColumn(
                     "Total Cost (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Total cost for this category"
                 )
             })
@@ -1136,7 +1155,7 @@ class UnifiedAnalyzer:
             categories_column_config.update({
                 'Subtotal (€)': st.column_config.NumberColumn(
                     "Subtotal (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Category subtotal"
                 )
             })
@@ -1197,7 +1216,7 @@ class UnifiedAnalyzer:
                         DisplayFields.ITEM_CODE: item.code or 'Unknown',
                         DisplayFields.ITEM_DESCRIPTION: self._truncate_text(item.description or '', 60),
                         DisplayFields.QUANTITY: getattr(item, 'quantity', 0) or 0,
-                        DisplayFields.UNIT_PRICE_EUR: item_unit_price,
+                        DisplayFields.UNIT_PRICE: item_unit_price,
                         DisplayFields.TOTAL_EUR: item_price,
                         **self._get_item_specific_fields(item)
                     })
@@ -1270,17 +1289,17 @@ class UnifiedAnalyzer:
         items_column_config = {
             DisplayFields.QUANTITY: st.column_config.NumberColumn(
                 "Quantity",
-                format="%.0f",
+                format="localized",
                 help="Quantity of this item"
             ),
-            DisplayFields.UNIT_PRICE_EUR: st.column_config.NumberColumn(
+            DisplayFields.UNIT_PRICE: st.column_config.NumberColumn(
                 "Unit Price (€)",
-                format="€{:,.0f}",
+                format="localized",
                 help="Unit price for this item"
             ),
             DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
                 "Total (€)",
-                format="€{:,.0f}",
+                format="localized",
                 help="Total value for this item"
             )
         }
@@ -1290,27 +1309,27 @@ class UnifiedAnalyzer:
             items_column_config.update({
                 'Unit Cost (€)': st.column_config.NumberColumn(
                     "Unit Cost (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Unit cost for this item"
                 ),
                 'Total Cost (€)': st.column_config.NumberColumn(
                     "Total Cost (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Total cost for this item"
                 ),
                 'UTM Robot': st.column_config.NumberColumn(
                     "UTM Robot",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Robot engineering costs"
                 ),
                 'PM Cost': st.column_config.NumberColumn(
                     "PM Cost",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Project management costs"
                 ),
                 'Install': st.column_config.NumberColumn(
                     "Install",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Installation costs"
                 ),
                 'After Sales': st.column_config.NumberColumn(
@@ -1323,7 +1342,7 @@ class UnifiedAnalyzer:
             items_column_config.update({
                 'Cost (€)': st.column_config.NumberColumn(
                     "Cost (€)",
-                    format="€{:,.0f}",
+                    format="localized",
                     help="Cost for this item"
                 )
             })

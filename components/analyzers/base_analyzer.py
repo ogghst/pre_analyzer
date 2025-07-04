@@ -107,7 +107,32 @@ class BaseAnalyzer(ABC):
         
         # Display table
         st.subheader("📊 Groups Summary Table")
-        st.dataframe(df_groups, use_container_width=True)
+        
+        # Configure column formats for groups table
+        groups_column_config = {
+            DisplayFields.CATEGORIES_COUNT: st.column_config.NumberColumn(
+                "Categories",
+                format="localized",
+                help="Number of categories in this group"
+            ),
+            DisplayFields.TOTAL_ITEMS: st.column_config.NumberColumn(
+                "Total Items",
+                format="localized",
+                help="Total number of items in this group"
+            ),
+            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
+                "Total (€)",
+                format="localized",
+                help="Total value for this group"
+            ),
+            DisplayFields.QUANTITY: st.column_config.NumberColumn(
+                "Quantity",
+                format="localized",
+                help="Quantity of this product group"
+            )
+        }
+        
+        st.dataframe(df_groups, use_container_width=True, column_config=groups_column_config)
         
         # Create charts
         col1, col2 = st.columns(2)
@@ -203,7 +228,22 @@ class BaseAnalyzer(ABC):
         
         # Display filtered table
         st.subheader("📊 Categories Summary Table")
-        st.dataframe(filtered_df, use_container_width=True)
+        
+        # Configure column formats for categories table
+        categories_column_config = {
+            DisplayFields.ITEMS_COUNT: st.column_config.NumberColumn(
+                "Items Count",
+                format="localized",
+                help="Number of items in this category"
+            ),
+            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
+                "Total (€)",
+                format="localized",
+                help="Total value for this category"
+            )
+        }
+        
+        st.dataframe(filtered_df, use_container_width=True, column_config=categories_column_config)
         
         if len(filtered_df) > 0:
             # Top categories chart
@@ -314,7 +354,27 @@ class BaseAnalyzer(ABC):
             # Create display table
             display_columns = [DisplayFields.GROUP_ID, DisplayFields.CATEGORY_ID, DisplayFields.ITEM_CODE, 
                              DisplayFields.ITEM_DESCRIPTION, DisplayFields.QUANTITY, DisplayFields.UNIT_PRICE, DisplayFields.TOTAL_PRICE]
-            st.dataframe(top_items[display_columns], use_container_width=True)
+            
+            # Configure column formats for items table
+            items_column_config = {
+                DisplayFields.QUANTITY: st.column_config.NumberColumn(
+                    "Quantity",
+                    format="localized",
+                    help="Quantity of this item"
+                ),
+                DisplayFields.UNIT_PRICE: st.column_config.NumberColumn(
+                    "Unit Price (€)",
+                    format="localized",
+                    help="Unit price for this item"
+                ),
+                DisplayFields.TOTAL_PRICE: st.column_config.NumberColumn(
+                    "Total Price (€)",
+                    format="localized",
+                    help="Total price for this item"
+                )
+            }
+            
+            st.dataframe(top_items[display_columns], use_container_width=True, column_config=items_column_config)
             
             # Top items chart
             if len(top_items) > 0:

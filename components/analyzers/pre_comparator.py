@@ -147,7 +147,20 @@ class PreComparator:
         
         if differences:
             df_diff = pd.DataFrame(differences)
-            st.dataframe(df_diff, use_container_width=True)
+            
+            # Configure column formats for differences table
+            differences_column_config = {
+                self.name1: st.column_config.TextColumn(
+                    self.name1,
+                    help=f"Values from {self.name1}"
+                ),
+                self.name2: st.column_config.TextColumn(
+                    self.name2,
+                    help=f"Values from {self.name2}"
+                )
+            }
+            
+            st.dataframe(df_diff, use_container_width=True, column_config=differences_column_config)
         else:
             st.success("No significant differences found in project parameters!")
     
@@ -178,7 +191,32 @@ class PreComparator:
         
         # Display comparison table
         st.subheader("📊 Financial Breakdown Comparison")
-        st.dataframe(df_financial, use_container_width=True)
+        
+        # Configure column formats for financial comparison table
+        financial_column_config = {
+            self.name1: st.column_config.NumberColumn(
+                self.name1,
+                format="localized",
+                help=f"Financial values from {self.name1}"
+            ),
+            self.name2: st.column_config.NumberColumn(
+                self.name2,
+                format="localized",
+                help=f"Financial values from {self.name2}"
+            ),
+            'Difference': st.column_config.NumberColumn(
+                "Difference",
+                format="localized",
+                help="Absolute difference between files"
+            ),
+            'Difference %': st.column_config.NumberColumn(
+                "Difference %",
+                format="%.2f%%",
+                help="Percentage difference between files"
+            )
+        }
+        
+        st.dataframe(df_financial, use_container_width=True, column_config=financial_column_config)
         
         # Side-by-side charts
         col1, col2 = st.columns(2)

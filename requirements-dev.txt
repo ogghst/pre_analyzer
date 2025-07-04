@@ -1,0 +1,21 @@
+# Development dependencies for linting, formatting, and code quality
+black>=23.0.0          # Code formatter
+isort>=5.12.0          # Import sorter
+flake8>=6.0.0          # Linter
+pylint>=2.17.0         # Advanced linter
+mypy>=1.0.0            # Type checker
+bandit>=1.7.5          # Security linter
+autopep8>=2.0.0        # PEP8 formatter
+pycodestyle>=2.10.0    # Style checker
+pydocstyle>=6.3.0      # Docstring checker
+pre-commit>=3.0.0      # Git hooks
+rope>=1.7.0            # Refactoring library
+
+# PDF generation and export
+reportlab>=4.0.0       # PDF generation
+matplotlib>=3.7.0      # Chart generation
+kaleido>=0.2.1         # Plotly static image export
+
+# Optional but useful
+pylsp-mypy>=0.6.0      # MyPy plugin for Python LSP
+python-lsp-server>=1.7.0  # Language server 

@@ -10,3 +10,12 @@ __pycache__
 db
 temp
 htmlcov
+.mypy_cache
+.pytest_cache
+.coverage
+.coverage.*
+.coverage.xml
+.coverage.json
+.coverage.yaml
+.coverage.yml
+.coverage.json
