@@ -56,7 +56,7 @@ class UnifiedAnalyzer:
             "Items Analysis",
             "Profitability Analysis",
             "UTM Analysis",
-            "WBE Analysis",
+            "Financial Analysis",
             "Field Analysis"
         ]
     
@@ -159,86 +159,110 @@ class UnifiedAnalyzer:
             st.plotly_chart(fig_pie, use_container_width=True)
         
         with col2:
-            # Margin gauge chart
-            if self.detected_file_type == 'analisi_profittabilita':
-                margin_perc = getattr(self.totals, 'offer_margin_percentage', 0) or 0
-            else:
-                margin_perc = getattr(self.totals, 'offer_margin_percentage', 0) or 0
+            # Category profitability chart
+            category_data = []
+            for group in self.product_groups:
+                for category in group.categories:
+                    cat_total = self._get_category_total(category)
+                    
+                    if self.detected_file_type == 'analisi_profittabilita':
+                        cat_cost = getattr(category, 'cost_subtotal', 0) or 0
+                        cat_revenue = getattr(category, 'offer_price', 0) or 0
+                        if cat_revenue == 0:
+                            cat_revenue = cat_total
+                    else:
+                        cat_cost = sum(getattr(item, 'total_cost', 0) or 0 for item in category.items)
+                        cat_revenue = cat_total
+                    
+                    cat_margin = cat_revenue - cat_cost
+                    try:
+                        cat_margin_perc = (cat_margin / cat_revenue * 100) if cat_revenue > 0 else 0
+                    except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                        cat_margin_perc = 0
+                    
+                    if cat_revenue > 0:
+                        category_data.append({
+                            'Category': category.category_id or 'Unknown',
+                            'Revenue': cat_revenue,
+                            'Cost': cat_cost,
+                            'Margin %': cat_margin_perc
+                        })
             
-            fig_gauge = go.Figure(go.Indicator(
-                mode="gauge+number+delta",
-                value=margin_perc,
-                domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': "Margin Percentage"},
-                delta={'reference': 25, 'position': "top"},
-                gauge={
-                    'axis': {'range': [None, 100]},
-                    'bar': {'color': "darkblue"},
-                    'steps': [
-                        {'range': [0, 15], 'color': "lightgray"},
-                        {'range': [15, 25], 'color': "yellow"},
-                        {'range': [25, 100], 'color': "green"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': 90
-                    }
-                }
-            ))
-            fig_gauge.update_layout(height=500)
-            st.plotly_chart(fig_gauge, use_container_width=True)
+            df_categories = pd.DataFrame(category_data)
+            
+            if not df_categories.empty:
+                # Top categories by revenue
+                top_categories = df_categories.nlargest(10, 'Revenue')
+                
+                fig_category = px.bar(
+                    top_categories,
+                    x='Category',
+                    y='Margin %',
+                    title='Top 10 Categories by Margin %',
+                    text='Margin %',
+                    color='Margin %',
+                    color_continuous_scale='RdYlGn'
+                )
+                fig_category.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_category.update_layout(height=500)
+                st.plotly_chart(fig_category, use_container_width=True)
         
-        # Group-level profitability analysis
-        st.subheader("📊 Profitability by Group")
+        # Category-level profitability analysis
+        st.subheader("📊 Profitability by Category")
         
-        # Collect group-level data
-        group_data = []
+        # Collect category-level data
+        category_data = []
         for group in self.product_groups:
-            group_total = self._get_group_total(group)
-            
-            # Calculate cost based on file type
-            if self.detected_file_type == 'analisi_profittabilita':
-                group_cost = sum(getattr(cat, 'cost_subtotal', 0) or 0 for cat in group.categories)
-            else:
-                group_cost = sum(getattr(item, 'total_cost', 0) or 0 for cat in group.categories for item in cat.items)
-            
-            group_margin = group_total - group_cost
-            try:
-                group_margin_perc = (group_margin / group_total * 100) if group_total > 0 else 0
-            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-                group_margin_perc = 0
-            
-            group_data.append({
-                'Group': group.group_id or 'Unknown',
-                'Total (€)': group_total,
-                'Cost (€)': group_cost,
-                'Margin (€)': group_margin,
-                'Margin (%)': group_margin_perc
-            })
+            for category in group.categories:
+                cat_total = self._get_category_total(category)
+                
+                # Calculate cost based on file type
+                if self.detected_file_type == 'analisi_profittabilita':
+                    cat_cost = getattr(category, 'cost_subtotal', 0) or 0
+                    cat_revenue = getattr(category, 'offer_price', 0) or 0
+                    if cat_revenue == 0:
+                        cat_revenue = cat_total
+                else:
+                    cat_cost = sum(getattr(item, 'total_cost', 0) or 0 for item in category.items)
+                    cat_revenue = cat_total
+                
+                cat_margin = cat_revenue - cat_cost
+                try:
+                    cat_margin_perc = (cat_margin / cat_revenue * 100) if cat_revenue > 0 else 0
+                except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                    cat_margin_perc = 0
+                
+                category_data.append({
+                    'Category': category.category_id or 'Unknown',
+                    'Group': group.group_id or 'Unknown',
+                    'Revenue (€)': cat_revenue,
+                    'Cost (€)': cat_cost,
+                    'Margin (€)': cat_margin,
+                    'Margin (%)': cat_margin_perc
+                })
         
-        df_groups = pd.DataFrame(group_data)
+        df_categories = pd.DataFrame(category_data)
         
-        if not df_groups.empty:
-            # Group profitability table
-            st.subheader("📋 Group Profitability Table")
+        if not df_categories.empty:
+            # Category profitability table
+            st.subheader("📋 Category Profitability Table")
             
             # Configure column formats
             column_config = {
-                "Total (€)": st.column_config.NumberColumn(
-                    "Total (€)",
+                'Revenue (€)': st.column_config.NumberColumn(
+                    "Revenue (€)",
                     format="€%.0f",
-                    help="Total value for this group"
+                    help="Total revenue for this category"
                 ),
                 "Cost (€)": st.column_config.NumberColumn(
                     "Cost (€)", 
                     format="€%.0f",
-                    help="Total cost for this group"
+                    help="Total cost for this category"
                 ),
                 "Margin (€)": st.column_config.NumberColumn(
                     "Margin (€)",
                     format="€%.0f", 
-                    help="Profit margin for this group"
+                    help="Profit margin for this category"
                 ),
                 "Margin (%)": st.column_config.NumberColumn(
                     "Margin (%)",
@@ -247,28 +271,28 @@ class UnifiedAnalyzer:
                 )
             }
             
-            st.dataframe(df_groups, use_container_width=True, column_config=column_config)
+            st.dataframe(df_categories, use_container_width=True, column_config=column_config)
             
-            # Group profitability chart
+            # Category profitability chart
             fig_bar = go.Figure()
             
             fig_bar.add_trace(go.Bar(
-                name='Total',
-                x=df_groups['Group'],
-                y=df_groups['Total (€)'],
-                marker_color='#3498db'
+                name='Revenue',
+                x=df_categories['Category'],
+                y=df_categories['Revenue (€)'],
+                marker_color='#2E86AB'
             ))
             
             fig_bar.add_trace(go.Bar(
                 name='Cost',
-                x=df_groups['Group'],
-                y=df_groups['Cost (€)'],
-                marker_color='#e74c3c'
+                x=df_categories['Category'],
+                y=df_categories['Cost (€)'],
+                marker_color='#A23B72'
             ))
             
             fig_bar.update_layout(
-                title='Total vs Cost by Group',
-                xaxis_title='Group',
+                title='Revenue vs Cost by Category',
+                xaxis_title='Category',
                 yaxis_title='Amount (€)',
                 barmode='group',
                 height=500
@@ -276,430 +300,400 @@ class UnifiedAnalyzer:
             
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
-            st.warning("No group data available for profitability analysis.")
+            st.warning("No category data available for profitability analysis.")
     
     def display_utm_analysis(self):
-        """Display UTM (time tracking) analysis - primarily for Analisi Profittabilita"""
-        st.header("⏱️ UTM & Time Analysis")
+        """Display Cost Center Analysis - generalized for all cost centers"""
+        st.header("💰 Cost Center Analysis")
         
-        if self.detected_file_type != 'analisi_profittabilita':
-            st.warning("UTM Analysis is primarily designed for Analisi Profittabilita files. Limited data may be available for PRE files.")
+        # Collect all cost center data from all items
+        cost_center_data = []
+        cost_center_fields = [
+            ('UTM Robot', 'utm_robot', 'utm_robot_h'),
+            ('UTM LGV', 'utm_lgv', 'utm_lgv_h'),
+            ('UTM Intra', 'utm_intra', 'utm_intra_h'),
+            ('UTM Layout', 'utm_layout', 'utm_layout_h'),
+            ('PM Cost', 'pm_cost', 'pm_h'),
+            ('Install', 'install', 'install_h'),
+            ('After Sales', 'after_sales', 'after_sales_h'),
+            ('Total Cost', 'total_cost', 'total_h')
+        ]
         
-        # Collect UTM data from all items
-        utm_data = []
         for group in self.product_groups:
             for category in group.categories:
                 for item in category.items:
-                    # UTM fields (mainly in Analisi Profittabilita)
-                    utm_robot = self._safe_float(getattr(item, 'utm_robot', 0))
-                    utm_robot_h = self._safe_float(getattr(item, 'utm_robot_h', 0))
-                    utm_lgv = self._safe_float(getattr(item, 'utm_lgv', 0))
-                    utm_lgv_h = self._safe_float(getattr(item, 'utm_lgv_h', 0))
-                    utm_intra = self._safe_float(getattr(item, 'utm_intra', 0))
-                    utm_intra_h = self._safe_float(getattr(item, 'utm_intra_h', 0))
-                    utm_layout = self._safe_float(getattr(item, 'utm_layout', 0))
-                    utm_layout_h = self._safe_float(getattr(item, 'utm_layout_h', 0))
+                    item_data = {
+                        DisplayFields.GROUP_ID: group.group_id or 'Unknown',
+                        DisplayFields.CATEGORY_ID: category.category_id or 'Unknown',
+                        DisplayFields.ITEM_CODE: item.code or 'Unknown',
+                        DisplayFields.ITEM_DESCRIPTION: self._truncate_text(item.description or '', 40),
+                    }
                     
-                    # PM and other time fields
-                    pm_cost = self._safe_float(getattr(item, 'pm_cost', 0))
-                    pm_h = self._safe_float(getattr(item, 'pm_h', 0))
+                    # Add all cost center fields
+                    total_cost = 0
+                    total_hours = 0
+                    has_data = False
                     
-                    # Only include items with UTM data
-                    total_utm_value = utm_robot + utm_lgv + utm_intra + utm_layout
-                    total_utm_hours = utm_robot_h + utm_lgv_h + utm_intra_h + utm_layout_h + pm_h
+                    for field_name, cost_field, hours_field in cost_center_fields:
+                        cost_value = self._safe_float(getattr(item, cost_field, 0))
+                        hours_value = self._safe_float(getattr(item, hours_field, 0))
+                        
+                        item_data[f'{field_name} (€)'] = cost_value
+                        item_data[f'{field_name} Hours'] = hours_value
+                        
+                        if cost_value > 0 or hours_value > 0:
+                            has_data = True
+                        
+                        total_cost += cost_value
+                        total_hours += hours_value
                     
-                    if total_utm_value > 0 or total_utm_hours > 0:
-                        utm_data.append({
-                            DisplayFields.GROUP_ID: group.group_id or 'Unknown',
-                            DisplayFields.CATEGORY_ID: category.category_id or 'Unknown',
-                            DisplayFields.ITEM_CODE: item.code or 'Unknown',
-                            DisplayFields.ITEM_DESCRIPTION: self._truncate_text(item.description or '', 40),
-                            'UTM Robot': utm_robot,
-                            'UTM Robot Hours': utm_robot_h,
-                            'UTM LGV': utm_lgv,
-                            'UTM LGV Hours': utm_lgv_h,
-                            'UTM Intra': utm_intra,
-                            'UTM Intra Hours': utm_intra_h,
-                            'UTM Layout': utm_layout,
-                            'UTM Layout Hours': utm_layout_h,
-                            'PM Cost': pm_cost,
-                            'PM Hours': pm_h,
-                            'Total UTM Value': total_utm_value,
-                            'Total Hours': total_utm_hours
-                        })
+                    item_data['Total Cost (€)'] = total_cost
+                    item_data['Total Hours'] = total_hours
+                    
+                    # Only include items with cost center data
+                    if has_data:
+                        cost_center_data.append(item_data)
         
-        if utm_data:
-            df_utm = pd.DataFrame(utm_data)
+        if cost_center_data:
+            df_cost_center = pd.DataFrame(cost_center_data)
             
-            # Summary metrics
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Items with UTM", len(df_utm))
-            with col2:
-                st.metric("Total UTM Value", f"€{df_utm['Total UTM Value'].sum():,.2f}")
-            with col3:
-                st.metric("Total Hours", f"{df_utm['Total Hours'].sum():,.1f}")
-            with col4:
-                try:
-                    avg_hourly = df_utm['Total UTM Value'].sum() / df_utm['Total Hours'].sum() if df_utm['Total Hours'].sum() > 0 else 0
-                except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-                    avg_hourly = 0
-                st.metric("Avg €/Hour", f"€{avg_hourly:.2f}")
+            # Cost center selection
+            st.subheader("🎯 Select Cost Center for Analysis")
             
-            # UTM breakdown charts
-            col1, col2 = st.columns(2)
+            # Get available cost centers
+            available_cost_centers = []
+            for field_name, _, _ in cost_center_fields:
+                if df_cost_center[f'{field_name} (€)'].sum() > 0:
+                    available_cost_centers.append(field_name)
             
-            with col1:
-                # UTM values by type
-                utm_summary = {
-                    'UTM Type': ['Robot', 'LGV', 'Intra', 'Layout', 'PM'],
-                    'Total Value (€)': [
-                        df_utm['UTM Robot'].sum(),
-                        df_utm['UTM LGV'].sum(),
-                        df_utm['UTM Intra'].sum(),
-                        df_utm['UTM Layout'].sum(),
-                        df_utm['PM Cost'].sum()
-                    ]
-                }
-                df_utm_summary = pd.DataFrame(utm_summary)
-                df_utm_summary = df_utm_summary[df_utm_summary['Total Value (€)'] > 0]
+            if available_cost_centers:
+                selected_cost_center = st.selectbox(
+                    "Select Cost Center",
+                    options=available_cost_centers,
+                    key="cost_center_selector"
+                )
                 
-                if not df_utm_summary.empty:
-                    fig_utm_pie = px.pie(
-                        df_utm_summary,
-                        values='Total Value (€)',
-                        names='UTM Type',
-                        title='UTM Value Distribution by Type'
-                    )
-                    fig_utm_pie.update_layout(height=400)
-                    st.plotly_chart(fig_utm_pie, use_container_width=True)
-            
-            with col2:
-                # Hours by type
-                hours_summary = {
-                    'UTM Type': ['Robot', 'LGV', 'Intra', 'Layout', 'PM'],
-                    'Total Hours': [
-                        df_utm['UTM Robot Hours'].sum(),
-                        df_utm['UTM LGV Hours'].sum(),
-                        df_utm['UTM Intra Hours'].sum(),
-                        df_utm['UTM Layout Hours'].sum(),
-                        df_utm['PM Hours'].sum()
-                    ]
-                }
-                df_hours_summary = pd.DataFrame(hours_summary)
-                df_hours_summary = df_hours_summary[df_hours_summary['Total Hours'] > 0]
+                # Filter data for selected cost center
+                cost_col = f'{selected_cost_center} (€)'
+                hours_col = f'{selected_cost_center} Hours'
                 
-                if not df_hours_summary.empty:
-                    fig_hours_bar = px.bar(
-                        df_hours_summary,
-                        x='UTM Type',
-                        y='Total Hours',
-                        title='Total Hours by UTM Type',
-                        color='Total Hours',
-                        color_continuous_scale='Blues'
-                    )
-                    fig_hours_bar.update_layout(height=400)
-                    st.plotly_chart(fig_hours_bar, use_container_width=True)
-            
-            # Detailed UTM table
-            st.subheader("📊 UTM Detailed Analysis")
-            
-            # Filter for items with significant UTM values
-            significant_utm = df_utm[df_utm['Total UTM Value'] > 100].nlargest(20, 'Total UTM Value')
-            
-            if not significant_utm.empty:
-                display_cols = [DisplayFields.GROUP_ID, DisplayFields.ITEM_CODE, DisplayFields.ITEM_DESCRIPTION, 
-                              'Total UTM Value', 'Total Hours', 'UTM Robot', 'UTM LGV', 'PM Cost']
+                filtered_df = df_cost_center[df_cost_center[cost_col] > 0]
                 
-                # Configure column formats for UTM table
-                utm_column_config = {
-                    'Total UTM Value': st.column_config.NumberColumn(
-                        "Total UTM Value",
-                        format="localized",
-                        help="Total UTM value for this item"
-                    ),
-                    'Total Hours': st.column_config.NumberColumn(
-                        "Total Hours",
-                        format="%.1f",
-                        help="Total hours allocated to this item"
-                    ),
-                    'UTM Robot': st.column_config.NumberColumn(
-                        "UTM Robot",
-                        format="localized",
-                        help="Robot engineering costs"
-                    ),
-                    'UTM LGV': st.column_config.NumberColumn(
-                        "UTM LGV", 
-                        format="localized",
-                        help="LGV engineering costs"
-                    ),
-                    'PM Cost': st.column_config.NumberColumn(
-                        "PM Cost",
-                        format="localized",
-                        help="Project management costs"
-                    )
-                }
-                
-                st.dataframe(significant_utm[display_cols], use_container_width=True, column_config=utm_column_config)
+                if not filtered_df.empty:
+                    # Summary metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Items with Cost", len(filtered_df))
+                    with col2:
+                        st.metric("Total Cost", f"€{filtered_df[cost_col].sum():,.0f}")
+                    with col3:
+                        st.metric("Total Hours", f"{filtered_df[hours_col].sum():,.1f}")
+                    with col4:
+                        try:
+                            avg_hourly = filtered_df[cost_col].sum() / filtered_df[hours_col].sum() if filtered_df[hours_col].sum() > 0 else 0
+                        except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                            avg_hourly = 0
+                        st.metric("Avg €/Hour", f"€{avg_hourly:.2f}")
+                    
+                    # Charts
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Cost distribution by category
+                        category_costs = filtered_df.groupby(DisplayFields.CATEGORY_ID)[cost_col].sum().reset_index()
+                        fig_category_pie = px.pie(
+                            category_costs,
+                            values=cost_col,
+                            names=DisplayFields.CATEGORY_ID,
+                            title=f'{selected_cost_center} Cost Distribution by Category'
+                        )
+                        fig_category_pie.update_layout(height=400)
+                        st.plotly_chart(fig_category_pie, use_container_width=True)
+                    
+                    with col2:
+                        # Top items by cost
+                        top_items = filtered_df.nlargest(10, cost_col)
+                        fig_top_items = px.bar(
+                            top_items,
+                            x=cost_col,
+                            y=DisplayFields.ITEM_CODE,
+                            orientation='h',
+                            title=f'Top 10 Items by {selected_cost_center} Cost',
+                            text=cost_col,
+                            color=cost_col,
+                            color_continuous_scale='Blues'
+                        )
+                        fig_top_items.update_traces(texttemplate='€%{text:,.0f}', textposition='outside')
+                        fig_top_items.update_layout(height=400)
+                        st.plotly_chart(fig_top_items, use_container_width=True)
+                    
+                    # Detailed table
+                    st.subheader(f"📊 {selected_cost_center} Detailed Analysis")
+                    
+                    # Show top items with significant costs
+                    significant_items = filtered_df[filtered_df[cost_col] > 100].nlargest(20, cost_col)
+                    
+                    if not significant_items.empty:
+                        display_cols = [DisplayFields.CATEGORY_ID, DisplayFields.ITEM_CODE, DisplayFields.ITEM_DESCRIPTION, 
+                                      cost_col, hours_col]
+                        
+                        # Configure column formats
+                        cost_center_column_config = {
+                            cost_col: st.column_config.NumberColumn(
+                                f"{selected_cost_center} (€)",
+                                format="€%.0f",
+                                help=f"Cost for {selected_cost_center}"
+                            ),
+                            hours_col: st.column_config.NumberColumn(
+                                f"{selected_cost_center} Hours",
+                                format="%.1f",
+                                help=f"Hours for {selected_cost_center}"
+                            )
+                        }
+                        
+                        st.dataframe(significant_items[display_cols], use_container_width=True, column_config=cost_center_column_config)
+                    else:
+                        st.info(f"No items with significant {selected_cost_center} costs found.")
+                else:
+                    st.info(f"No items with {selected_cost_center} costs found.")
+            else:
+                st.info("No cost center data available.")
         else:
-            st.info("No UTM data found in the current dataset.")
+            st.info("No cost center data found in the current dataset.")
     
-    def display_wbe_analysis(self):
-        """Display WBE (Work Breakdown Element) analysis - primarily for Analisi Profittabilita"""
-        st.header("🏗️ WBE Analysis")
+
+    
+    def display_financial_analysis(self):
+        """Display comprehensive financial analysis similar to PRE Financial Analysis"""
+        st.header("💼 Financial Analysis")
         
-        if self.detected_file_type != 'analisi_profittabilita':
-            st.warning("WBE Analysis is primarily designed for Analisi Profittabilita files. Limited data may be available for PRE files.")
+        # Calculate overall financial metrics
+        total_revenue = 0
+        total_cost = 0
+        total_listino = 0
+        total_offer = 0
         
-        # Collect WBE data from all categories
-        wbe_data = {}
-        wbe_categories = {}
+        # Collect financial data by category
+        financial_data = []
         
         for group in self.product_groups:
             for category in group.categories:
-                wbe = getattr(category, 'wbe', '') or ''
-                wbe = wbe.strip()
-                if wbe and wbe != '':
-                    if wbe not in wbe_data:
-                        wbe_data[wbe] = {
-                            'categories': [],
-                            'total_listino': 0,
-                            'total_costo': 0,
-                            'total_offer': 0,
-                            'items': []
-                        }
-                        wbe_categories[wbe] = []
-                    
-                    # Add category to WBE
-                    wbe_categories[wbe].append({
-                        'group_id': group.group_id or 'Unknown',
-                        'group_name': group.group_name or 'Unnamed',
-                        'category_id': category.category_id or 'Unknown',
-                        'category_name': category.category_name or 'Unnamed',
-                        'category': category
-                    })
-                    
-                    # Aggregate financials
-                    if self.detected_file_type == 'analisi_profittabilita':
-                        cat_listino = self._safe_float(getattr(category, 'pricelist_subtotal', 0))
-                        cat_costo = self._safe_float(getattr(category, 'cost_subtotal', 0))
-                        cat_offer = self._safe_float(getattr(category, 'offer_price', 0))
-                    else:
-                        # PRE file
-                        cat_listino = self._get_category_total(category)
-                        cat_costo = sum(self._safe_float(getattr(item, 'total_cost', 0)) for item in category.items)
-                        cat_offer = 0
-                    
-                    wbe_data[wbe]['total_listino'] += cat_listino
-                    wbe_data[wbe]['total_costo'] += cat_costo
-                    wbe_data[wbe]['total_offer'] += cat_offer
-                    
-                    # Collect items for detailed analysis
-                    for item in category.items:
-                        item_dict = {
-                            'group_id': group.group_id or 'Unknown',
-                            'category_id': category.category_id or 'Unknown',
-                            'code': item.code,
-                            'description': item.description,
-                            'quantity': getattr(item, 'quantity', 0),
-                            'unit_cost': getattr(item, 'unit_cost', 0),
-                            'total_cost': getattr(item, 'total_cost', 0)
-                        }
-                        wbe_data[wbe]['items'].append(item_dict)
+                cat_total = self._get_category_total(category)
+                
+                # Calculate costs and revenues based on file type
+                if self.detected_file_type == 'analisi_profittabilita':
+                    cat_cost = getattr(category, 'cost_subtotal', 0) or 0
+                    cat_listino = getattr(category, 'pricelist_subtotal', 0) or 0
+                    cat_offer = getattr(category, 'offer_price', 0) or 0
+                    cat_revenue = cat_offer if cat_offer > 0 else cat_listino
+                else:
+                    cat_cost = sum(getattr(item, 'total_cost', 0) or 0 for item in category.items)
+                    cat_listino = cat_total
+                    cat_offer = 0
+                    cat_revenue = cat_total
+                
+                total_revenue += cat_revenue
+                total_cost += cat_cost
+                total_listino += cat_listino
+                total_offer += cat_offer
+                
+                cat_margin = cat_revenue - cat_cost
+                try:
+                    cat_margin_perc = (cat_margin / cat_revenue * 100) if cat_revenue > 0 else 0
+                except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                    cat_margin_perc = 0
+                
+                financial_data.append({
+                    'Group': group.group_id or 'Unknown',
+                    'Category': category.category_id or 'Unknown',
+                    'Revenue (€)': cat_revenue,
+                    'Cost (€)': cat_cost,
+                    'Margin (€)': cat_margin,
+                    'Margin (%)': cat_margin_perc,
+                    'Listino (€)': cat_listino,
+                    'Offer (€)': cat_offer
+                })
         
-        if not wbe_data:
-            st.warning("No WBE data found in the current dataset.")
-            return
+        # Overall financial summary
+        st.subheader("📊 Overall Financial Summary")
         
-        # WBE selection
-        st.subheader("🎯 Select WBE for Analysis")
-        
-        # Create WBE summary for selection
-        wbe_summary = []
-        for wbe, data in wbe_data.items():
-            margin = data['total_listino'] - data['total_costo']
-            try:
-                margin_perc = (margin / data['total_listino'] * 100) if data['total_listino'] > 0 else 0
-            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-                margin_perc = 0
-            
-            wbe_summary.append({
-                DisplayFields.WBE: wbe,
-                DisplayFields.CATEGORIES: len(wbe_categories[wbe]),
-                DisplayFields.ITEMS: len(data['items']),
-                DisplayFields.LISTINO_EUR: data['total_listino'],
-                DisplayFields.COSTO_EUR: data['total_costo'],
-                DisplayFields.MARGIN_EUR: margin,
-                DisplayFields.MARGIN_PERCENT: margin_perc
-            })
-        
-        df_wbe_summary = pd.DataFrame(wbe_summary)
-        
-        # Display WBE summary table
-        wbe_summary_column_config = {
-            DisplayFields.CATEGORIES: st.column_config.NumberColumn(
-                "Categories",
-                format="localized",
-                help="Number of categories in this WBE"
-            ),
-            DisplayFields.ITEMS: st.column_config.NumberColumn(
-                "Items",
-                format="localized", 
-                help="Number of items in this WBE"
-            ),
-            DisplayFields.LISTINO_EUR: st.column_config.NumberColumn(
-                "Listino (€)",
-                format="localized",
-                help="Total listino value for this WBE"
-            ),
-            DisplayFields.COSTO_EUR: st.column_config.NumberColumn(
-                "Cost (€)",
-                format="localized",
-                help="Total cost for this WBE"
-            ),
-            DisplayFields.MARGIN_EUR: st.column_config.NumberColumn(
-                "Margin (€)",
-                format="localized",
-                help="Profit margin for this WBE"
-            ),
-            DisplayFields.MARGIN_PERCENT: st.column_config.NumberColumn(
-                "Margin (%)",
-                format="%.2f%%",
-                help="Profit margin percentage"
-            )
-        }
-        
-        st.dataframe(df_wbe_summary, use_container_width=True, column_config=wbe_summary_column_config)
-        
-        # WBE selection dropdown
-        selected_wbe = st.selectbox(
-            "Select WBE for Detailed Analysis",
-            options=list(wbe_data.keys()),
-            format_func=lambda x: f"{x} (€{wbe_data[x]['total_listino']:,.0f})",
-            key="unified_wbe_selector"
-        )
-        
-        if selected_wbe:
-            self._display_detailed_wbe_analysis(selected_wbe, wbe_data[selected_wbe], wbe_categories[selected_wbe])
-    
-    def _display_detailed_wbe_analysis(self, wbe_name: str, wbe_data: Dict[str, Any], wbe_categories: List[Dict[str, Any]]):
-        """Display detailed analysis for selected WBE"""
-        st.markdown("---")
-        st.subheader(f"📊 Detailed Analysis: {wbe_name}")
-        
-        # Financial overview
-        total_listino = wbe_data['total_listino']
-        total_costo = wbe_data['total_costo']
-        total_offer = wbe_data.get('total_offer', 0)
-        margin = total_listino - total_costo
+        overall_margin = total_revenue - total_cost
         try:
-            margin_perc = (margin / total_listino * 100) if total_listino > 0 else 0
+            overall_margin_perc = (overall_margin / total_revenue * 100) if total_revenue > 0 else 0
         except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-            margin_perc = 0
+            overall_margin_perc = 0
         
-        # Key metrics
-        if total_offer > 0 and self.detected_file_type == 'analisi_profittabilita':
-            offer_margin = total_offer - total_costo
-            try:
-                offer_margin_perc = (1 - (total_costo / total_offer)) * 100 if total_offer > 0 else 0
-            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-                offer_margin_perc = 0
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric("Total Revenue", f"€{total_revenue:,.0f}")
+        with col2:
+            st.metric("Total Cost", f"€{total_cost:,.0f}")
+        with col3:
+            st.metric("Total Margin", f"€{overall_margin:,.0f}")
+        with col4:
+            st.metric("Margin %", f"{overall_margin_perc:.2f}%")
+        with col5:
+            if total_listino > 0:
+                discount_perc = ((total_listino - total_revenue) / total_listino * 100) if total_listino > 0 else 0
+                st.metric("Discount %", f"{discount_perc:.2f}%")
+        
+        # Financial breakdown by category
+        df_financial = pd.DataFrame(financial_data)
+        
+        if not df_financial.empty:
+            st.subheader("💰 Financial Breakdown by Category")
             
-            col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
-                st.metric("Total Listino", f"€{total_listino:,.2f}")
-            with col2:
-                st.metric("Total Cost", f"€{total_costo:,.2f}")
-            with col3:
-                st.metric("Total Offer (VA21)", f"€{total_offer:,.2f}")
-            with col4:
-                st.metric("Offer Margin", f"€{offer_margin:,.2f}")
-            with col5:
-                st.metric("Offer Margin %", f"{offer_margin_perc:.2f}%", delta=f"{offer_margin_perc - 20:.1f}%")
-        else:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Listino", f"€{total_listino:,.2f}")
-            with col2:
-                st.metric("Total Cost", f"€{total_costo:,.2f}")
-            with col3:
-                st.metric("Margin", f"€{margin:,.2f}")
-            with col4:
-                st.metric("Margin %", f"{margin_perc:.2f}%", delta=f"{margin_perc - 20:.1f}%")
-        
-        # Categories within WBE
-        st.subheader("📂 Categories in this WBE")
-        
-        cat_data = []
-        for cat_info in wbe_categories:
-            category = cat_info['category']
-            
-            if self.detected_file_type == 'analisi_profittabilita':
-                cat_listino = self._safe_float(getattr(category, 'pricelist_subtotal', 0))
-                cat_costo = self._safe_float(getattr(category, 'cost_subtotal', 0))
-                cat_offer = self._safe_float(getattr(category, 'offer_price', 0))
-            else:
-                cat_listino = self._get_category_total(category)
-                cat_costo = sum(self._safe_float(getattr(item, 'total_cost', 0)) for item in category.items)
-                cat_offer = 0
-            
-            cat_margin = cat_listino - cat_costo
-            try:
-                cat_margin_perc = (cat_margin / cat_listino * 100) if cat_listino > 0 else 0
-            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-                cat_margin_perc = 0
-            
-            cat_data.append({
-                'Group': cat_info['group_id'],
-                'Category': cat_info['category_id'],
-                'Name': self._truncate_text(cat_info['category_name'], 30),
-                'Items': len(category.items),
-                'Listino (€)': cat_listino,
-                'Cost (€)': cat_costo,
-                'Offer (€)': cat_offer,
-                'Margin (€)': cat_margin,
-                'Margin %': cat_margin_perc
-            })
-        
-        df_categories = pd.DataFrame(cat_data)
-        
-        if not df_categories.empty:
-            # Configure column formats for WBE categories table
-            wbe_categories_column_config = {
-                'Items': st.column_config.NumberColumn(
-                    "Items",
-                    format="localized",
-                    help="Number of items in this category"
-                ),
-                'Listino (€)': st.column_config.NumberColumn(
-                    "Listino (€)",
-                    format="localized",
-                    help="Listino value for this category"
+            # Configure column formats
+            financial_column_config = {
+                'Revenue (€)': st.column_config.NumberColumn(
+                    "Revenue (€)",
+                    format="€%.0f",
+                    help="Total revenue for this category"
                 ),
                 'Cost (€)': st.column_config.NumberColumn(
                     "Cost (€)",
-                    format="localized",
-                    help="Cost for this category"
-                ),
-                'Offer (€)': st.column_config.NumberColumn(
-                    "Offer (€)",
-                    format="localized",
-                    help="Offer price for this category"
+                    format="€%.0f",
+                    help="Total cost for this category"
                 ),
                 'Margin (€)': st.column_config.NumberColumn(
                     "Margin (€)",
-                    format="localized",
+                    format="€%.0f",
                     help="Profit margin for this category"
                 ),
-                'Margin %': st.column_config.NumberColumn(
-                    "Margin %",
+                'Margin (%)': st.column_config.NumberColumn(
+                    "Margin (%)",
                     format="%.2f%%",
                     help="Profit margin percentage"
+                ),
+                'Listino (€)': st.column_config.NumberColumn(
+                    "Listino (€)",
+                    format="€%.0f",
+                    help="Listino price for this category"
+                ),
+                'Offer (€)': st.column_config.NumberColumn(
+                    "Offer (€)",
+                    format="€%.0f",
+                    help="Offer price for this category"
                 )
             }
             
-            st.dataframe(df_categories, use_container_width=True, column_config=wbe_categories_column_config)
-    
+            st.dataframe(df_financial, use_container_width=True, column_config=financial_column_config)
+            
+            # Financial charts
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Revenue vs Cost waterfall chart
+                fig_waterfall = go.Figure()
+                
+                # Add revenue bars
+                fig_waterfall.add_trace(go.Bar(
+                    name='Revenue',
+                    x=df_financial['Category'],
+                    y=df_financial['Revenue (€)'],
+                    marker_color='#2E86AB'
+                ))
+                
+                # Add cost bars
+                fig_waterfall.add_trace(go.Bar(
+                    name='Cost',
+                    x=df_financial['Category'],
+                    y=df_financial['Cost (€)'],
+                    marker_color='#A23B72'
+                ))
+                
+                fig_waterfall.update_layout(
+                    title='Revenue vs Cost by Category',
+                    xaxis_title='Category',
+                    yaxis_title='Amount (€)',
+                    barmode='group',
+                    height=500
+                )
+                
+                st.plotly_chart(fig_waterfall, use_container_width=True)
+            
+            with col2:
+                # Margin analysis
+                fig_margin = px.scatter(
+                    df_financial,
+                    x='Revenue (€)',
+                    y='Margin (%)',
+                    size='Margin (€)',
+                    color='Group',
+                    hover_data=['Category'],
+                    title='Margin Analysis: Revenue vs Margin %'
+                )
+                fig_margin.update_layout(height=500)
+                st.plotly_chart(fig_margin, use_container_width=True)
+            
+            # Top performers analysis
+            st.subheader("🏆 Top Performers")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Top categories by revenue
+                top_revenue = df_financial.nlargest(10, 'Revenue (€)')
+                fig_top_revenue = px.bar(
+                    top_revenue,
+                    x='Revenue (€)',
+                    y='Category',
+                    orientation='h',
+                    title='Top 10 Categories by Revenue',
+                    text='Revenue (€)',
+                    color='Margin (%)',
+                    color_continuous_scale='RdYlGn'
+                )
+                fig_top_revenue.update_traces(texttemplate='€%{text:,.0f}', textposition='outside')
+                fig_top_revenue.update_layout(height=500)
+                st.plotly_chart(fig_top_revenue, use_container_width=True)
+            
+            with col2:
+                # Top categories by margin percentage
+                top_margin = df_financial[df_financial['Revenue (€)'] > 1000].nlargest(10, 'Margin (%)')
+                fig_top_margin = px.bar(
+                    top_margin,
+                    x='Margin (%)',
+                    y='Category',
+                    orientation='h',
+                    title='Top 10 Categories by Margin %',
+                    text='Margin (%)',
+                    color='Margin (%)',
+                    color_continuous_scale='RdYlGn'
+                )
+                fig_top_margin.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_top_margin.update_layout(height=500)
+                st.plotly_chart(fig_top_margin, use_container_width=True)
+            
+            # Risk analysis
+            st.subheader("⚠️ Risk Analysis")
+            
+            # Categories with low margin
+            low_margin = df_financial[df_financial['Margin (%)'] < 15]
+            high_value_low_margin = low_margin[low_margin['Revenue (€)'] > 10000]
+            
+            if not high_value_low_margin.empty:
+                st.warning("Categories with High Revenue but Low Margin (<15%):")
+                risk_column_config = {
+                    'Revenue (€)': st.column_config.NumberColumn(
+                        "Revenue (€)",
+                        format="€%.0f",
+                        help="Revenue for this category"
+                    ),
+                    'Margin (%)': st.column_config.NumberColumn(
+                        "Margin (%)",
+                        format="%.2f%%",
+                        help="Margin percentage"
+                    )
+                }
+                st.dataframe(high_value_low_margin[['Category', 'Revenue (€)', 'Margin (%)']].head(10), 
+                           use_container_width=True, column_config=risk_column_config)
+            else:
+                st.success("No high-value categories with concerning low margins found.")
+        else:
+            st.warning("No financial data available for analysis.")
+
     def display_field_analysis(self):
         """Display comprehensive field analysis"""
         st.header("🔍 Comprehensive Field Analysis")
@@ -975,12 +969,31 @@ class UnifiedAnalyzer:
             group_total = self._get_group_total(group)
             total_items = sum(len(cat.items) for cat in group.categories)
             
+            # Calculate costs based on file type
+            if self.detected_file_type == 'analisi_profittabilita':
+                group_cost = sum(getattr(cat, 'cost_subtotal', 0) or 0 for cat in group.categories)
+                group_revenue = sum(getattr(cat, 'offer_price', 0) or 0 for cat in group.categories)
+                if group_revenue == 0:
+                    group_revenue = group_total
+            else:
+                group_cost = sum(getattr(item, 'total_cost', 0) or 0 for cat in group.categories for item in cat.items)
+                group_revenue = group_total
+            
+            group_margin = group_revenue - group_cost
+            try:
+                group_margin_perc = (group_margin / group_revenue * 100) if group_revenue > 0 else 0
+            except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                group_margin_perc = 0
+            
             groups_data.append({
                 DisplayFields.GROUP_ID: group.group_id or 'Unknown',
                 DisplayFields.GROUP_NAME: group.group_name or 'Unnamed',
                 DisplayFields.CATEGORIES_COUNT: len(group.categories),
                 DisplayFields.TOTAL_ITEMS: total_items,
-                DisplayFields.TOTAL_EUR: group_total,
+                'Revenue (€)': group_revenue,
+                'Cost (€)': group_cost,
+                'Margin (€)': group_margin,
+                'Margin (%)': group_margin_perc,
                 DisplayFields.QUANTITY: getattr(group, 'quantity', 1) or 1
             })
         
@@ -1005,10 +1018,25 @@ class UnifiedAnalyzer:
                 format="localized",
                 help="Total number of items in this group"
             ),
-            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
-                "Total (€)",
-                format="{num:,d}",
-                help="Total value for this group"
+            'Revenue (€)': st.column_config.NumberColumn(
+                "Revenue (€)",
+                format="€%.0f",
+                help="Total revenue for this group"
+            ),
+            'Cost (€)': st.column_config.NumberColumn(
+                "Cost (€)",
+                format="€%.0f",
+                help="Total cost for this group"
+            ),
+            'Margin (€)': st.column_config.NumberColumn(
+                "Margin (€)",
+                format="€%.0f",
+                help="Profit margin for this group"
+            ),
+            'Margin (%)': st.column_config.NumberColumn(
+                "Margin (%)",
+                format="%.2f%%",
+                help="Profit margin percentage"
             ),
             DisplayFields.QUANTITY: st.column_config.NumberColumn(
                 "Quantity",
@@ -1023,40 +1051,53 @@ class UnifiedAnalyzer:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Bar chart of total values by group
-            fig_bar = px.bar(
-                df_groups, 
-                x=DisplayFields.GROUP_ID, 
-                y=DisplayFields.TOTAL_EUR,
-                title='Total Value by Product Group',
-                text=DisplayFields.TOTAL_EUR,
-                color=DisplayFields.TOTAL_EUR,
-                color_continuous_scale='Blues'
+            # Revenue vs Cost chart
+            fig_bar = go.Figure()
+            fig_bar.add_trace(go.Bar(
+                name='Revenue',
+                x=df_groups[DisplayFields.GROUP_ID],
+                y=df_groups['Revenue (€)'],
+                marker_color='#2E86AB'
+            ))
+            fig_bar.add_trace(go.Bar(
+                name='Cost',
+                x=df_groups[DisplayFields.GROUP_ID],
+                y=df_groups['Cost (€)'],
+                marker_color='#A23B72'
+            ))
+            fig_bar.update_layout(
+                title='Revenue vs Cost by Product Group',
+                xaxis_title='Group',
+                yaxis_title='Amount (€)',
+                barmode='group',
+                height=500
             )
-            fig_bar.update_traces(texttemplate='€%{text:,.0f}', textposition='outside')
-            fig_bar.update_layout(height=500)
             st.plotly_chart(fig_bar, use_container_width=True)
         
         with col2:
-            # Pie chart of total value distribution
-            fig_pie = px.pie(
+            # Margin percentage chart
+            fig_margin = px.bar(
                 df_groups, 
-                values=DisplayFields.TOTAL_EUR, 
-                names=DisplayFields.GROUP_ID,
-                title='Total Value Distribution by Group'
+                x=DisplayFields.GROUP_ID, 
+                y='Margin (%)',
+                title='Margin Percentage by Product Group',
+                text='Margin (%)',
+                color='Margin (%)',
+                color_continuous_scale='RdYlGn'
             )
-            fig_pie.update_layout(height=500)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            fig_margin.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig_margin.update_layout(height=500)
+            st.plotly_chart(fig_margin, use_container_width=True)
         
         # Treemap visualization
         st.subheader("🗺️ Groups Treemap")
         fig_treemap = px.treemap(
             df_groups,
             path=[DisplayFields.GROUP_ID],
-            values=DisplayFields.TOTAL_EUR,
-            title='Product Groups by Total Value',
-            color=DisplayFields.TOTAL_EUR,
-            color_continuous_scale='RdYlBu'
+            values='Revenue (€)',
+            title='Product Groups by Revenue',
+            color='Margin (%)',
+            color_continuous_scale='RdYlGn'
         )
         fig_treemap.update_layout(height=600)
         st.plotly_chart(fig_treemap, use_container_width=True)
@@ -1070,6 +1111,23 @@ class UnifiedAnalyzer:
         for group in self.product_groups:
             for category in group.categories:
                 cat_total = self._get_category_total(category)
+                
+                # Calculate costs and revenues
+                if self.detected_file_type == 'analisi_profittabilita':
+                    cat_cost = getattr(category, 'cost_subtotal', 0) or 0
+                    cat_revenue = getattr(category, 'offer_price', 0) or 0
+                    if cat_revenue == 0:
+                        cat_revenue = cat_total
+                else:
+                    cat_cost = sum(getattr(item, 'total_cost', 0) or 0 for item in category.items)
+                    cat_revenue = cat_total
+                
+                cat_margin = cat_revenue - cat_cost
+                try:
+                    cat_margin_perc = (cat_margin / cat_revenue * 100) if cat_revenue > 0 else 0
+                except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
+                    cat_margin_perc = 0
+                
                 categories_data.append({
                     DisplayFields.GROUP_ID: group.group_id or 'Unknown',
                     DisplayFields.GROUP_NAME: group.group_name or 'Unnamed',
@@ -1077,6 +1135,10 @@ class UnifiedAnalyzer:
                     DisplayFields.CATEGORY_NAME: category.category_name or 'Unnamed',
                     DisplayFields.ITEMS_COUNT: len(category.items),
                     DisplayFields.TOTAL_EUR: cat_total,
+                    'Revenue (€)': cat_revenue,
+                    'Cost (€)': cat_cost,
+                    'Margin (€)': cat_margin,
+                    'Margin (%)': cat_margin_perc,
                     **self._get_category_specific_fields(category)
                 })
         
@@ -1127,8 +1189,28 @@ class UnifiedAnalyzer:
             ),
             DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
                 "Total (€)",
-                format="localized",
+                format="€%.0f",
                 help="Total value for this category"
+            ),
+            'Revenue (€)': st.column_config.NumberColumn(
+                "Revenue (€)",
+                format="€%.0f",
+                help="Total revenue for this category"
+            ),
+            'Cost (€)': st.column_config.NumberColumn(
+                "Cost (€)",
+                format="€%.0f",
+                help="Total cost for this category"
+            ),
+            'Margin (€)': st.column_config.NumberColumn(
+                "Margin (€)",
+                format="€%.0f",
+                help="Profit margin for this category"
+            ),
+            'Margin (%)': st.column_config.NumberColumn(
+                "Margin (%)",
+                format="%.2f%%",
+                help="Profit margin percentage"
             )
         }
         
@@ -1183,14 +1265,14 @@ class UnifiedAnalyzer:
             st.plotly_chart(fig_bar, use_container_width=True)
         
         with col2:
-            # Categories by items count
+            # Categories costs vs revenues scatter chart
             fig_scatter = px.scatter(
                 filtered_df,
-                x=DisplayFields.ITEMS_COUNT,
-                y=DisplayFields.TOTAL_EUR,
-                size=DisplayFields.TOTAL_EUR,
+                x='Cost (€)',
+                y='Revenue (€)',
+                size='Revenue (€)',
                 hover_data=[DisplayFields.CATEGORY_ID, DisplayFields.GROUP_ID],
-                title='Categories: Items Count vs Total Value',
+                title='Categories: Cost vs Revenue',
                 color=DisplayFields.GROUP_ID
             )
             fig_scatter.update_layout(height=500)
@@ -1208,16 +1290,33 @@ class UnifiedAnalyzer:
                     item_price = self._get_item_price(item)
                     item_unit_price = self._get_item_unit_price(item)
                     
+                    # Calculate revenues and costs for all items
+                    if self.detected_file_type == 'analisi_profittabilita':
+                        item_cost = getattr(item, 'total_cost', 0) or 0
+                        item_revenue = getattr(item, 'offer_price', 0) or 0
+                        if item_revenue == 0:
+                            item_revenue = item_price
+                    else:
+                        item_cost = getattr(item, 'total_cost', 0) or 0
+                        item_revenue = item_price
+                    
                     items_data.append({
-                        DisplayFields.GROUP_ID: group.group_id or 'Unknown',
-                        DisplayFields.GROUP_NAME: group.group_name or 'Unnamed',
                         DisplayFields.CATEGORY_ID: category.category_id or 'Unknown',
                         DisplayFields.CATEGORY_NAME: category.category_name or 'Unnamed',
                         DisplayFields.ITEM_CODE: item.code or 'Unknown',
                         DisplayFields.ITEM_DESCRIPTION: self._truncate_text(item.description or '', 60),
                         DisplayFields.QUANTITY: getattr(item, 'quantity', 0) or 0,
                         DisplayFields.UNIT_PRICE: item_unit_price,
-                        DisplayFields.TOTAL_EUR: item_price,
+                        'Revenue (€)': item_revenue,
+                        'Total Cost (€)': item_cost,
+                        'UTM Robot (€)': getattr(item, 'utm_robot', 0) or 0,
+                        'UTM LGV (€)': getattr(item, 'utm_lgv', 0) or 0,
+                        'UTM Intra (€)': getattr(item, 'utm_intra', 0) or 0,
+                        'UTM Layout (€)': getattr(item, 'utm_layout', 0) or 0,
+                        'PM Cost (€)': getattr(item, 'pm_cost', 0) or 0,
+                        'Install (€)': getattr(item, 'install', 0) or 0,
+                        'After Sales (€)': getattr(item, 'after_sales', 0) or 0,
+                        'Unit Cost (€)': getattr(item, 'unit_cost', 0) or 0,
                         **self._get_item_specific_fields(item)
                     })
         
@@ -1232,33 +1331,34 @@ class UnifiedAnalyzer:
         with col1:
             st.metric("Total Items", len(df_items))
         with col2:
-            items_with_value = df_items[df_items[DisplayFields.TOTAL_EUR] > 0]
-            st.metric("Items with Value", len(items_with_value))
+            items_with_value = df_items[df_items['Revenue (€)'] > 0]
+            st.metric("Items with Revenue", len(items_with_value))
         with col3:
-            total_value = df_items[DisplayFields.TOTAL_EUR].sum()
-            st.metric("Total Value", f"€{total_value:,.2f}")
+            total_value = df_items['Revenue (€)'].sum()
+            st.metric("Total Revenue", f"€{total_value:,.2f}")
         with col4:
-            avg_value = df_items[df_items[DisplayFields.TOTAL_EUR] > 0][DisplayFields.TOTAL_EUR].mean()
-            st.metric("Average Item Value", f"€{avg_value:,.2f}" if not pd.isna(avg_value) else "€0.00")
+            avg_value = df_items[df_items['Revenue (€)'] > 0]['Revenue (€)'].mean()
+            st.metric("Average Item Revenue", f"€{avg_value:,.2f}" if not pd.isna(avg_value) else "€0.00")
         
         # Filter controls
         st.subheader("🔍 Filter Options")
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            selected_groups = st.multiselect(
-                "Filter by Groups",
-                options=df_items[DisplayFields.GROUP_ID].unique(),
-                default=df_items[DisplayFields.GROUP_ID].unique(),
-                key="items_group_filter"
+            selected_categories = st.multiselect(
+                "Filter by Categories",
+                options=df_items[DisplayFields.CATEGORY_ID].unique(),
+                default=df_items[DisplayFields.CATEGORY_ID].unique(),
+                key="items_category_filter"
             )
         
         with col2:
             min_value = st.number_input(
-                "Minimum Item Value (€)",
+                "Minimum Item Revenue (€)",
                 min_value=0.0,
                 value=0.0,
                 step=100.0,
+                help="Filter items by minimum revenue value",
                 key="items_min_value"
             )
         
@@ -1274,9 +1374,9 @@ class UnifiedAnalyzer:
         
         # Apply filters
         filtered_df = df_items[
-            (df_items[DisplayFields.GROUP_ID].isin(selected_groups)) &
-            (df_items[DisplayFields.TOTAL_EUR] >= min_value)
-        ].nlargest(top_n, DisplayFields.TOTAL_EUR)
+            (df_items[DisplayFields.CATEGORY_ID].isin(selected_categories)) &
+            (df_items['Revenue (€)'] >= min_value)
+        ].nlargest(top_n, 'Revenue (€)')
         
         if filtered_df.empty:
             st.warning("No items match the selected filters.")
@@ -1294,13 +1394,58 @@ class UnifiedAnalyzer:
             ),
             DisplayFields.UNIT_PRICE: st.column_config.NumberColumn(
                 "Unit Price (€)",
-                format="localized",
+                format="€%.2f",
                 help="Unit price for this item"
             ),
-            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
-                "Total (€)",
-                format="localized",
-                help="Total value for this item"
+            'Revenue (€)': st.column_config.NumberColumn(
+                "Revenue (€)",
+                format="€%.0f",
+                help="Total revenue for this item"
+            ),
+            'Total Cost (€)': st.column_config.NumberColumn(
+                "Total Cost (€)",
+                format="€%.0f",
+                help="Total cost for this item"
+            ),
+            'UTM Robot (€)': st.column_config.NumberColumn(
+                "UTM Robot (€)",
+                format="€%.0f",
+                help="Robot engineering costs"
+            ),
+            'UTM LGV (€)': st.column_config.NumberColumn(
+                "UTM LGV (€)",
+                format="€%.0f",
+                help="LGV engineering costs"
+            ),
+            'UTM Intra (€)': st.column_config.NumberColumn(
+                "UTM Intra (€)",
+                format="€%.0f",
+                help="Intralogistics engineering costs"
+            ),
+            'UTM Layout (€)': st.column_config.NumberColumn(
+                "UTM Layout (€)",
+                format="€%.0f",
+                help="Layout engineering costs"
+            ),
+            'PM Cost (€)': st.column_config.NumberColumn(
+                "PM Cost (€)",
+                format="€%.0f",
+                help="Project management costs"
+            ),
+            'Install (€)': st.column_config.NumberColumn(
+                "Install (€)",
+                format="€%.0f",
+                help="Installation costs"
+            ),
+            'After Sales (€)': st.column_config.NumberColumn(
+                "After Sales (€)",
+                format="€%.0f",
+                help="After sales service costs"
+            ),
+            'Unit Cost (€)': st.column_config.NumberColumn(
+                "Unit Cost (€)",
+                format="€%.2f",
+                help="Unit cost for this item"
             )
         }
         
@@ -1353,30 +1498,30 @@ class UnifiedAnalyzer:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Top items by value
+            # Top items by revenue
             top_items = filtered_df.head(20)
             fig_bar = px.bar(
                 top_items,
-                x=DisplayFields.TOTAL_EUR,
+                x='Revenue (€)',
                 y=DisplayFields.ITEM_CODE,
                 orientation='h',
-                title=f'Top 20 Items by Value',
-                text=DisplayFields.TOTAL_EUR,
-                hover_data=[DisplayFields.ITEM_DESCRIPTION, DisplayFields.GROUP_ID],
-                color=DisplayFields.GROUP_ID
+                title=f'Top 20 Items by Revenue',
+                text='Revenue (€)',
+                hover_data=[DisplayFields.ITEM_DESCRIPTION, DisplayFields.CATEGORY_ID],
+                color=DisplayFields.CATEGORY_ID
             )
             fig_bar.update_traces(texttemplate='€%{text:,.0f}', textposition='outside')
             fig_bar.update_layout(height=600)
             st.plotly_chart(fig_bar, use_container_width=True)
         
         with col2:
-            # Value distribution by group
-            group_totals = filtered_df.groupby(DisplayFields.GROUP_ID)[DisplayFields.TOTAL_EUR].sum().reset_index()
+            # Revenue distribution by category
+            category_totals = filtered_df.groupby(DisplayFields.CATEGORY_ID)['Revenue (€)'].sum().reset_index()
             fig_pie = px.pie(
-                group_totals,
-                values=DisplayFields.TOTAL_EUR,
-                names=DisplayFields.GROUP_ID,
-                title='Value Distribution by Group (Filtered Items)'
+                category_totals,
+                values='Revenue (€)',
+                names=DisplayFields.CATEGORY_ID,
+                title='Revenue Distribution by Category (Filtered Items)'
             )
             fig_pie.update_layout(height=600)
             st.plotly_chart(fig_pie, use_container_width=True) 
