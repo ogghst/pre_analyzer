@@ -20,4 +20,3 @@ gatherUsageStats = false
 [global]
 # Development mode settings
 developmentMode = false
-logLevel = "info" 

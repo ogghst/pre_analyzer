@@ -180,7 +180,6 @@ class DisplayFields:
     
     # Financial display fields
     LISTINO_EUR = "Listino (€)"
-    COSTO_EUR = "Costo (€)"
     MARGIN_EUR = "Margin (€)"
     MARGIN_PERCENT = "Margin %"
     EQUIPMENT_EUR = "Equipment (€)"

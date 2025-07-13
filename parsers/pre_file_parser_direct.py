@@ -84,6 +84,7 @@ class MDCRows:
 class MDCColumns:
     COD = 1
     DESCRIPTION = 2
+    COD_NUMBER = 3
     DIRECT_COST_EUR = 4
     PRICELIST_EUR = 5
     OFFER_EUR = 6
@@ -225,6 +226,8 @@ class DirectPreFileParser:
                     pricelist_subtotal=float(self._safe_decimal(sub_tot_listino_val)),
                     cost_subtotal=float(self._safe_decimal(sub_tot_costo_val)),
                     total_cost=float(self._safe_decimal(tot_costo_val)),
+                    groups_count=float(self._safe_decimal(gruppi_val)),
+                    notes=str(note_val) if note_val else "",
                     #offer_price=float(self._safe_decimal(tot_offer_val)) if tot_offer_val else None,
                     offer_price = (
                         float(self._safe_decimal(
@@ -250,6 +253,7 @@ class DirectPreFileParser:
                 )
                 current_group.categories.append(current_category)
                 logger.info(f"Found category: {cod_val}")
+                logger.info(f"   MDC data: {self.mdc_data.get(str(cod_val) + '_' + str(current_group.group_name) + '_' + str(tot_offer_val), {}).get(MDCColumns.SALE_EUR)}")
                 
             # Check if this is an item
             elif (codice_val and denominazione_val and current_category 
@@ -354,7 +358,7 @@ class DirectPreFileParser:
                 cod = mdc_ws.cell(row=row, column=MDCColumns.COD).value
                 description = mdc_ws.cell(row=row, column=MDCColumns.DESCRIPTION).value
                 amt = mdc_ws.cell(row=row, column=MDCColumns.OFFER_EUR).value
-                
+
                 if description:
                    
                     if not cod:
@@ -366,6 +370,7 @@ class DirectPreFileParser:
                     mdc_data[key] = {
                         MDCColumns.COD: cod,
                         MDCColumns.DESCRIPTION: description,
+                        MDCColumns.COD_NUMBER: mdc_ws.cell(row=row, column=MDCColumns.COD_NUMBER).value,
                         MDCColumns.DIRECT_COST_EUR: mdc_ws.cell(row=row, column=MDCColumns.DIRECT_COST_EUR).value,
                         MDCColumns.PRICELIST_EUR: mdc_ws.cell(row=row, column=MDCColumns.PRICELIST_EUR).value,
                         MDCColumns.OFFER_EUR: mdc_ws.cell(row=row, column=MDCColumns.OFFER_EUR).value,
@@ -401,18 +406,33 @@ class DirectPreFileParser:
         # Sum up costs from all categories
         for group in product_groups:
             for category in group.categories:
+                
+                #logger.info(f"Category: {category.category_name}")
+                logger.info(f"{category.category_id}   cost: {category.total_cost:,.0f}")
+                #logger.info(f"   Cost subtotal: {category.cost_subtotal}")
+                #logger.info(f"   Offer price: {category.offer_price}")
+                #logger.info(f"   Margin amount: {category.margin_amount}")
+                #logger.info(f"   Margin percentage: {category.margin_percentage}")
+                
                 # Use offer_price if available, otherwise pricelist_subtotal
                 category_pricelist  = Decimal(str(category.pricelist_subtotal)) if category.pricelist_subtotal is not None else Decimal("0.0")
-                category_cost = Decimal(str(category.cost_subtotal)) if category.cost_subtotal is not None else Decimal("0.0")
+                category_groups_count = Decimal(str(category.groups_count)) if category.groups_count is not None else Decimal("0.0")
+                category_cost = Decimal(str(category.total_cost)) if category.total_cost is not None else Decimal("0.0")
                 category_offer = Decimal(str(category.offer_price)) if category.offer_price is not None else Decimal("0.0")
                 category_margin_amount = Decimal(str(category.margin_amount)) if category.margin_amount is not None else Decimal("0.0")
 
-                total_pricelist += category_pricelist
+                total_pricelist += category_pricelist * category_groups_count
                 total_cost += category_cost
                 total_offer += category_offer
                 offer_margin += category_margin_amount
                 offer_margin_percentage = offer_margin / total_offer * 100
-        
+                
+        logger.info(f"Total pricelist: {total_pricelist}")
+        logger.info(f"Total cost: {total_cost}")
+        logger.info(f"Total offer: {total_offer}")
+        logger.info(f"Offer margin: {offer_margin}")
+        logger.info(f"Offer margin percentage: {offer_margin_percentage}")
+                
         return QuotationTotals(
             total_pricelist=float(self._round_decimal(total_pricelist)),
             total_cost=float(self._round_decimal(total_cost)),

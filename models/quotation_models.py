@@ -378,6 +378,16 @@ class QuotationCategory(BaseModel):
         description="Work Breakdown Element code for project tracking and SAP integration"
     )
     
+    groups_count: float = Field(
+        default=1.0,
+        description="Group quantity for this category"
+    )
+    
+    notes: Optional[str] = Field(
+        default="",
+        description="Notes for this category"
+    )
+    
     # Subtotal fields
     pricelist_subtotal: float = Field(
         default=0.0,

@@ -191,8 +191,8 @@ class UnifiedAnalyzer:
             df_categories = pd.DataFrame(category_data)
             
             if not df_categories.empty:
-                # Top categories by revenue
-                top_categories = df_categories.nlargest(10, 'Revenue')
+                # Top categories by margin percentage
+                top_categories = df_categories.nlargest(10, 'Margin %')
                 
                 fig_category = px.bar(
                     top_categories,
@@ -251,17 +251,17 @@ class UnifiedAnalyzer:
             column_config = {
                 'Revenue (€)': st.column_config.NumberColumn(
                     "Revenue (€)",
-                    format="€%.0f",
+                format="localized",
                     help="Total revenue for this category"
                 ),
                 "Cost (€)": st.column_config.NumberColumn(
                     "Cost (€)", 
-                    format="€%.0f",
+                format="localized",
                     help="Total cost for this category"
                 ),
                 "Margin (€)": st.column_config.NumberColumn(
                     "Margin (€)",
-                    format="€%.0f", 
+                    format="localized", 
                     help="Profit margin for this category"
                 ),
                 "Margin (%)": st.column_config.NumberColumn(
@@ -441,7 +441,7 @@ class UnifiedAnalyzer:
                         cost_center_column_config = {
                             cost_col: st.column_config.NumberColumn(
                                 f"{selected_cost_center} (€)",
-                                format="€%.0f",
+                                format="localized",
                                 help=f"Cost for {selected_cost_center}"
                             ),
                             hours_col: st.column_config.NumberColumn(
@@ -548,17 +548,17 @@ class UnifiedAnalyzer:
             financial_column_config = {
                 'Revenue (€)': st.column_config.NumberColumn(
                     "Revenue (€)",
-                    format="€%.0f",
+                    format="localized",
                     help="Total revenue for this category"
                 ),
                 'Cost (€)': st.column_config.NumberColumn(
                     "Cost (€)",
-                    format="€%.0f",
+                    format="localized",
                     help="Total cost for this category"
                 ),
                 'Margin (€)': st.column_config.NumberColumn(
                     "Margin (€)",
-                    format="€%.0f",
+                    format="localized",
                     help="Profit margin for this category"
                 ),
                 'Margin (%)': st.column_config.NumberColumn(
@@ -568,12 +568,12 @@ class UnifiedAnalyzer:
                 ),
                 'Listino (€)': st.column_config.NumberColumn(
                     "Listino (€)",
-                    format="€%.0f",
+                    format="localized",
                     help="Listino price for this category"
                 ),
                 'Offer (€)': st.column_config.NumberColumn(
                     "Offer (€)",
-                    format="€%.0f",
+                    format="localized",
                     help="Offer price for this category"
                 )
             }
@@ -678,7 +678,7 @@ class UnifiedAnalyzer:
                 risk_column_config = {
                     'Revenue (€)': st.column_config.NumberColumn(
                         "Revenue (€)",
-                        format="€%.0f",
+                        format="localized",
                         help="Revenue for this category"
                     ),
                     'Margin (%)': st.column_config.NumberColumn(
@@ -1020,17 +1020,17 @@ class UnifiedAnalyzer:
             ),
             'Revenue (€)': st.column_config.NumberColumn(
                 "Revenue (€)",
-                format="€%.0f",
+                format="localized",
                 help="Total revenue for this group"
             ),
             'Cost (€)': st.column_config.NumberColumn(
                 "Cost (€)",
-                format="€%.0f",
+                format="localized",
                 help="Total cost for this group"
             ),
             'Margin (€)': st.column_config.NumberColumn(
                 "Margin (€)",
-                format="€%.0f",
+                format="localized",
                 help="Profit margin for this group"
             ),
             'Margin (%)': st.column_config.NumberColumn(
@@ -1113,20 +1113,12 @@ class UnifiedAnalyzer:
                 cat_total = self._get_category_total(category)
                 
                 # Calculate costs and revenues
-                if self.detected_file_type == 'analisi_profittabilita':
-                    cat_cost = getattr(category, 'cost_subtotal', 0) or 0
-                    cat_revenue = getattr(category, 'offer_price', 0) or 0
-                    if cat_revenue == 0:
-                        cat_revenue = cat_total
-                else:
-                    cat_cost = sum(getattr(item, 'total_cost', 0) or 0 for item in category.items)
-                    cat_revenue = cat_total
+
+                cat_cost = getattr(category, 'total_cost', 0) or 0
+                cat_revenue =  getattr(category, 'offer_price', 0) or 0
                 
-                cat_margin = cat_revenue - cat_cost
-                try:
-                    cat_margin_perc = (cat_margin / cat_revenue * 100) if cat_revenue > 0 else 0
-                except (ZeroDivisionError, decimal.DivisionUndefined, decimal.InvalidOperation):
-                    cat_margin_perc = 0
+                cat_margin = getattr(category, 'margin_amount', 0) or 0
+                cat_margin_perc = getattr(category, 'margin_percentage', 0) or 0
                 
                 categories_data.append({
                     DisplayFields.GROUP_ID: group.group_id or 'Unknown',
@@ -1134,12 +1126,10 @@ class UnifiedAnalyzer:
                     DisplayFields.CATEGORY_ID: category.category_id or 'Unknown',
                     DisplayFields.CATEGORY_NAME: category.category_name or 'Unnamed',
                     DisplayFields.ITEMS_COUNT: len(category.items),
-                    DisplayFields.TOTAL_EUR: cat_total,
                     'Revenue (€)': cat_revenue,
                     'Cost (€)': cat_cost,
                     'Margin (€)': cat_margin,
-                    'Margin (%)': cat_margin_perc,
-                    **self._get_category_specific_fields(category)
+                    'Margin (%)': cat_margin_perc
                 })
         
         df_categories = pd.DataFrame(categories_data)
@@ -1151,16 +1141,16 @@ class UnifiedAnalyzer:
         # Filter controls
         col1, col2 = st.columns(2)
         with col1:
-            selected_groups = st.multiselect(
-                "Filter by Groups",
-                options=df_categories[DisplayFields.GROUP_ID].unique(),
-                default=df_categories[DisplayFields.GROUP_ID].unique(),
-                key="categories_group_filter"
+            selected_categories = st.multiselect(
+                "Filter by Category",
+                options=df_categories[DisplayFields.CATEGORY_ID].unique(),
+                default=df_categories[DisplayFields.CATEGORY_ID].unique(),
+                key="categories_filter"
             )
         
         with col2:
             min_value = st.number_input(
-                "Minimum Total Value (€)",
+                "Minimum Total Cost (€)",
                 min_value=0.0,
                 value=0.0,
                 step=1000.0,
@@ -1169,8 +1159,8 @@ class UnifiedAnalyzer:
         
         # Apply filters
         filtered_df = df_categories[
-            (df_categories[DisplayFields.GROUP_ID].isin(selected_groups)) &
-            (df_categories[DisplayFields.TOTAL_EUR] >= min_value)
+            (df_categories[DisplayFields.CATEGORY_ID].isin(selected_categories)) &
+            (df_categories["Cost (€)"] >= min_value)
         ]
         
         if filtered_df.empty:
@@ -1187,60 +1177,27 @@ class UnifiedAnalyzer:
                 format="localized",
                 help="Number of items in this category"
             ),
-            DisplayFields.TOTAL_EUR: st.column_config.NumberColumn(
-                "Total (€)",
-                format="€%.0f",
-                help="Total value for this category"
-            ),
             'Revenue (€)': st.column_config.NumberColumn(
                 "Revenue (€)",
-                format="€%.0f",
+                format="localized",
                 help="Total revenue for this category"
             ),
             'Cost (€)': st.column_config.NumberColumn(
                 "Cost (€)",
-                format="€%.0f",
+                format="localized",
                 help="Total cost for this category"
             ),
             'Margin (€)': st.column_config.NumberColumn(
                 "Margin (€)",
-                format="€%.0f",
+                format="localized",
                 help="Profit margin for this category"
             ),
             'Margin (%)': st.column_config.NumberColumn(
                 "Margin (%)",
-                format="%.2f%%",
+                format="localized",
                 help="Profit margin percentage"
             )
         }
-        
-        # Add specific fields configuration based on file type
-        if self.detected_file_type == 'analisi_profittabilita':
-            categories_column_config.update({
-                'Subtotal Listino (€)': st.column_config.NumberColumn(
-                    "Subtotal Listino (€)",
-                    format="localized",
-                    help="Subtotal from listino prices"
-                ),
-                'Subtotal Costo (€)': st.column_config.NumberColumn(
-                    "Subtotal Costo (€)",
-                    format="localized",
-                    help="Subtotal of costs"
-                ),
-                'Total Cost (€)': st.column_config.NumberColumn(
-                    "Total Cost (€)",
-                    format="localized",
-                    help="Total cost for this category"
-                )
-            })
-        else:
-            categories_column_config.update({
-                'Subtotal (€)': st.column_config.NumberColumn(
-                    "Subtotal (€)",
-                    format="localized",
-                    help="Category subtotal"
-                )
-            })
         
         st.dataframe(filtered_df, use_container_width=True, column_config=categories_column_config)
         
@@ -1248,16 +1205,21 @@ class UnifiedAnalyzer:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Top categories by value
-            top_categories = filtered_df.nlargest(10, DisplayFields.TOTAL_EUR)
+            # Top categories by cost
+            # Sum by category_id before selecting top 10 by cost
+            summed_by_category = filtered_df.groupby(DisplayFields.CATEGORY_ID, as_index=False).agg({
+                DisplayFields.COST_EUR: 'sum',
+                # Optionally, sum other fields if needed for the chart
+            })
+            top_categories = summed_by_category.nlargest(10, DisplayFields.COST_EUR)
             fig_bar = px.bar(
                 top_categories,
-                x=DisplayFields.TOTAL_EUR,
+                x=DisplayFields.COST_EUR,
                 y=DisplayFields.CATEGORY_ID,
                 orientation='h',
-                title='Top 10 Categories by Value',
-                text=DisplayFields.TOTAL_EUR,
-                color=DisplayFields.TOTAL_EUR,
+                title='Top 10 Categories by Cost',
+                text=DisplayFields.COST_EUR,
+                color=DisplayFields.COST_EUR,
                 color_continuous_scale='Viridis'
             )
             fig_bar.update_traces(texttemplate='€%{text:,.0f}', textposition='outside')
@@ -1265,15 +1227,20 @@ class UnifiedAnalyzer:
             st.plotly_chart(fig_bar, use_container_width=True)
         
         with col2:
+            
+            summed_by_category = filtered_df.groupby(DisplayFields.CATEGORY_ID, as_index=False).agg({
+                DisplayFields.COST_EUR: 'sum',
+                'Revenue (€)': 'sum',
+            })
             # Categories costs vs revenues scatter chart
             fig_scatter = px.scatter(
-                filtered_df,
+                summed_by_category,
                 x='Cost (€)',
                 y='Revenue (€)',
                 size='Revenue (€)',
-                hover_data=[DisplayFields.CATEGORY_ID, DisplayFields.GROUP_ID],
-                title='Categories: Cost vs Revenue',
-                color=DisplayFields.GROUP_ID
+                hover_data=[DisplayFields.CATEGORY_ID],
+                title='Categories: Cost vs Price',
+                color=DisplayFields.CATEGORY_ID
             )
             fig_scatter.update_layout(height=500)
             st.plotly_chart(fig_scatter, use_container_width=True)
@@ -1354,11 +1321,11 @@ class UnifiedAnalyzer:
         
         with col2:
             min_value = st.number_input(
-                "Minimum Item Revenue (€)",
+                "Minimum Item Cost (€)",
                 min_value=0.0,
                 value=0.0,
                 step=100.0,
-                help="Filter items by minimum revenue value",
+                help="Filter items by minimum cost value",
                 key="items_min_value"
             )
         
@@ -1375,8 +1342,8 @@ class UnifiedAnalyzer:
         # Apply filters
         filtered_df = df_items[
             (df_items[DisplayFields.CATEGORY_ID].isin(selected_categories)) &
-            (df_items['Revenue (€)'] >= min_value)
-        ].nlargest(top_n, 'Revenue (€)')
+            (df_items['Cost (€)'] >= min_value)
+        ].nlargest(top_n, 'Cost (€)')
         
         if filtered_df.empty:
             st.warning("No items match the selected filters.")
@@ -1394,57 +1361,57 @@ class UnifiedAnalyzer:
             ),
             DisplayFields.UNIT_PRICE: st.column_config.NumberColumn(
                 "Unit Price (€)",
-                format="€%.2f",
+                format="localized",
                 help="Unit price for this item"
             ),
             'Revenue (€)': st.column_config.NumberColumn(
                 "Revenue (€)",
-                format="€%.0f",
+                format="localized",
                 help="Total revenue for this item"
             ),
             'Total Cost (€)': st.column_config.NumberColumn(
                 "Total Cost (€)",
-                format="€%.0f",
+                format="localized",
                 help="Total cost for this item"
             ),
             'UTM Robot (€)': st.column_config.NumberColumn(
                 "UTM Robot (€)",
-                format="€%.0f",
+                format="localized",
                 help="Robot engineering costs"
             ),
             'UTM LGV (€)': st.column_config.NumberColumn(
                 "UTM LGV (€)",
-                format="€%.0f",
+                format="localized",
                 help="LGV engineering costs"
             ),
             'UTM Intra (€)': st.column_config.NumberColumn(
                 "UTM Intra (€)",
-                format="€%.0f",
+                format="localized",
                 help="Intralogistics engineering costs"
             ),
             'UTM Layout (€)': st.column_config.NumberColumn(
                 "UTM Layout (€)",
-                format="€%.0f",
+                format="localized",
                 help="Layout engineering costs"
             ),
             'PM Cost (€)': st.column_config.NumberColumn(
                 "PM Cost (€)",
-                format="€%.0f",
+                format="localized",
                 help="Project management costs"
             ),
             'Install (€)': st.column_config.NumberColumn(
                 "Install (€)",
-                format="€%.0f",
+                format="localized",
                 help="Installation costs"
             ),
             'After Sales (€)': st.column_config.NumberColumn(
                 "After Sales (€)",
-                format="€%.0f",
+                format="localized",
                 help="After sales service costs"
             ),
             'Unit Cost (€)': st.column_config.NumberColumn(
                 "Unit Cost (€)",
-                format="€%.2f",
+                format="localized",
                 help="Unit cost for this item"
             )
         }
@@ -1479,7 +1446,7 @@ class UnifiedAnalyzer:
                 ),
                 'After Sales': st.column_config.NumberColumn(
                     "After Sales",
-                    format="€%. 0f",
+                    format="localized",
                     help="After sales service costs"
                 )
             })

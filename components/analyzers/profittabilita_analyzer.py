@@ -584,7 +584,7 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                 DisplayFields.CATEGORIES: len(wbe_categories[wbe]),
                 DisplayFields.ITEMS: len(data[JsonFields.ITEMS]),
                 DisplayFields.LISTINO_EUR: data['total_listino'],
-                DisplayFields.COSTO_EUR: data['total_costo'],
+                DisplayFields.COST_EUR: data['total_costo'],
                 DisplayFields.MARGIN_EUR: margin,
                 DisplayFields.MARGIN_PERCENT: margin_perc
             })
@@ -609,7 +609,7 @@ class ProfittabilitaAnalyzer(BaseAnalyzer):
                 format="localized",
                 help="Total listino value for this WBE"
             ),
-            DisplayFields.COSTO_EUR: st.column_config.NumberColumn(
+            DisplayFields.COST_EUR: st.column_config.NumberColumn(
                 "Cost (€)",
                 format="localized",
                 help="Total cost for this WBE"
