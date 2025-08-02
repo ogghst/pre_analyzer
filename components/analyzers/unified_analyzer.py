@@ -883,7 +883,6 @@ class UnifiedAnalyzer:
         if self.detected_file_type == 'analisi_profittabilita':
             return {
                 'Unit Cost (€)': getattr(item, 'unit_cost', 0) or 0,
-                'Total Cost (€)': getattr(item, 'total_cost', 0) or 0,
                 'UTM Robot': getattr(item, 'utm_robot', 0) or 0,
                 'PM Cost': getattr(item, 'pm_cost', 0) or 0,
                 'Install': getattr(item, 'install', 0) or 0,
@@ -893,7 +892,6 @@ class UnifiedAnalyzer:
             # PRE file
             return {
                 'Unit Price (€)': getattr(item, 'pricelist_unit_price', 0) or 0,
-                'Cost (€)': getattr(item, 'total_cost', 0) or 0,
                 'Quantity': getattr(item, 'quantity', 0) or 0
             }
     
@@ -1208,18 +1206,18 @@ class UnifiedAnalyzer:
             # Top categories by cost
             # Sum by category_id before selecting top 10 by cost
             summed_by_category = filtered_df.groupby(DisplayFields.CATEGORY_ID, as_index=False).agg({
-                DisplayFields.COST_EUR: 'sum',
+                'Cost (€)': 'sum',
                 # Optionally, sum other fields if needed for the chart
             })
-            top_categories = summed_by_category.nlargest(10, DisplayFields.COST_EUR)
+            top_categories = summed_by_category.nlargest(10, 'Cost (€)')
             fig_bar = px.bar(
                 top_categories,
-                x=DisplayFields.COST_EUR,
+                x='Cost (€)',
                 y=DisplayFields.CATEGORY_ID,
                 orientation='h',
                 title='Top 10 Categories by Cost',
-                text=DisplayFields.COST_EUR,
-                color=DisplayFields.COST_EUR,
+                text='Cost (€)',
+                color='Cost (€)',
                 color_continuous_scale='Viridis'
             )
             fig_bar.update_traces(texttemplate='€%{text:,.0f}', textposition='outside')
@@ -1229,7 +1227,7 @@ class UnifiedAnalyzer:
         with col2:
             
             summed_by_category = filtered_df.groupby(DisplayFields.CATEGORY_ID, as_index=False).agg({
-                DisplayFields.COST_EUR: 'sum',
+                'Cost (€)': 'sum',
                 'Revenue (€)': 'sum',
             })
             # Categories costs vs revenues scatter chart
@@ -1275,7 +1273,7 @@ class UnifiedAnalyzer:
                         DisplayFields.QUANTITY: getattr(item, 'quantity', 0) or 0,
                         DisplayFields.UNIT_PRICE: item_unit_price,
                         'Revenue (€)': item_revenue,
-                        'Total Cost (€)': item_cost,
+                        'Cost (€)': item_cost,
                         'UTM Robot (€)': getattr(item, 'utm_robot', 0) or 0,
                         'UTM LGV (€)': getattr(item, 'utm_lgv', 0) or 0,
                         'UTM Intra (€)': getattr(item, 'utm_intra', 0) or 0,
@@ -1369,8 +1367,8 @@ class UnifiedAnalyzer:
                 format="localized",
                 help="Total revenue for this item"
             ),
-            'Total Cost (€)': st.column_config.NumberColumn(
-                "Total Cost (€)",
+            'Cost (€)': st.column_config.NumberColumn(
+                "Cost (€)",
                 format="localized",
                 help="Total cost for this item"
             ),
@@ -1424,8 +1422,8 @@ class UnifiedAnalyzer:
                     format="localized",
                     help="Unit cost for this item"
                 ),
-                'Total Cost (€)': st.column_config.NumberColumn(
-                    "Total Cost (€)",
+                'Cost (€)': st.column_config.NumberColumn(
+                    "Cost (€)",
                     format="localized",
                     help="Total cost for this item"
                 ),
