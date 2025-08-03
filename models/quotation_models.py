@@ -813,8 +813,12 @@ class IndustrialQuotation(BaseModel):
                 elif 'analisi' in parser_type.lower():
                     parser_type = ParserType.ANALISI_PROFITTABILITA_PARSER
                 else:
-                    logger.warning(f"Unknown parser_type '{parser_type}', defaulting to None")
-                    parser_type = None
+                    logger.warning(f"Unknown parser_type '{parser_type}', defaulting to PRE_FILE_PARSER")
+                    parser_type = ParserType.PRE_FILE_PARSER
+        
+        # If parser_type is still None, default to PRE_FILE_PARSER
+        if parser_type is None:
+            parser_type = ParserType.PRE_FILE_PARSER
         
         # Convert the parser dict to our model structure
         quotation_data = {

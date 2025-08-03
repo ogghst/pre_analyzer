@@ -19,6 +19,7 @@ from components.analyzers.pre_profittabilita_comparator import PreProfittabilita
 from components.analyzers.profittabilita_analyzer import ProfittabilitaAnalyzer
 from components.analyzers.profittabilita_comparator import ProfittabilitaComparator
 from components.analyzers.unified_analyzer import UnifiedAnalyzer
+from components.analyzers.unified_comparator import UnifiedComparator
 
 # Import components
 from components.file_processor import FileType, render_file_metrics, render_file_upload_component
@@ -49,6 +50,7 @@ class OperationMode(Enum):
     COMPARE_PRE = "compare_pre"
     COMPARE_PROFITTABILITA = "compare_profittabilita"
     CROSS_COMPARE_PRE_PROFITTABILITA = "cross_compare_pre_profittabilita"
+    COMPARE_UNIFIED = "compare_unified"
 
 
 class ProjectStructureAnalyzer:
@@ -78,6 +80,23 @@ class ProjectStructureAnalyzer:
         self.prof_data = None
         self.pre_file_name = None
         self.prof_file_name = None
+        
+        # Clear unified comparator cache
+        if 'unified_comparator' in st.session_state:
+            del st.session_state.unified_comparator
+        if 'unified_first_quotation' in st.session_state:
+            del st.session_state.unified_first_quotation
+        if 'unified_second_quotation' in st.session_state:
+            del st.session_state.unified_second_quotation
+        if 'unified_first_file_name' in st.session_state:
+            del st.session_state.unified_first_file_name
+        if 'unified_second_file_name' in st.session_state:
+            del st.session_state.unified_second_file_name
+        
+        # Clear all unified comparator cache keys
+        keys_to_remove = [key for key in st.session_state.keys() if key.startswith('unified_comparator_')]
+        for key in keys_to_remove:
+            del st.session_state[key]
 
     def initialize_session_state(self):
         """Initialize session state variables"""
@@ -107,6 +126,7 @@ class ProjectStructureAnalyzer:
             "🔄 Compare Two PRE Files": OperationMode.COMPARE_PRE,
             "⚖️ Compare Two Profittabilita Files": OperationMode.COMPARE_PROFITTABILITA,
             "🔗 Cross-Compare PRE vs Profittabilita": OperationMode.CROSS_COMPARE_PRE_PROFITTABILITA,
+            "🔄 Smart Comparison (Auto-Detect)": OperationMode.COMPARE_UNIFIED,
         }
 
         selected_operation = st.sidebar.radio(
@@ -394,6 +414,76 @@ class ProjectStructureAnalyzer:
 
         return pre_data, prof_data, pre_file_name, prof_file_name
 
+    def render_unified_comparison_upload(self):
+        """Render unified comparison file upload for any two quotation files"""
+        st.sidebar.subheader("🔄 Smart Comparison (Auto-Detect)")
+        st.sidebar.markdown("Upload any two quotation files for smart comparison (auto-detects PRE or Analisi Profittabilita).")
+
+        file_extensions = ["xlsx", "xls", "xlsm"]
+
+        # First file upload
+        st.sidebar.write("**First File:**")
+        uploaded_first_file = st.sidebar.file_uploader(
+            "Choose first quotation file", 
+            type=file_extensions, 
+            key="unified_first_file_uploader", 
+            help="Upload any quotation file (PRE or Analisi Profittabilita)"
+        )
+
+        # Second file upload
+        st.sidebar.write("**Second File:**")
+        uploaded_second_file = st.sidebar.file_uploader(
+            "Choose second quotation file",
+            type=file_extensions,
+            key="unified_second_file_uploader",
+            help="Upload any quotation file (PRE or Analisi Profittabilita)"
+        )
+
+        first_quotation, second_quotation = None, None
+        first_file_name, second_file_name = None, None
+
+        if uploaded_first_file is not None:
+            first_file_name = uploaded_first_file.name
+            with st.spinner(f"Processing first file: {first_file_name}..."):
+                try:
+                    # Create temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
+                        tmp_file.write(uploaded_first_file.getbuffer())
+                        temp_file_path = tmp_file.name
+
+                    try:
+                        # Parse with unified parser
+                        first_quotation = parse_quotation_file(temp_file_path)
+                        st.sidebar.success(f"✅ {first_file_name} loaded successfully")
+                    finally:
+                        # Clean up temporary file
+                        if os.path.exists(temp_file_path):
+                            os.unlink(temp_file_path)
+                except Exception as e:
+                    st.sidebar.error(f"❌ Error processing {first_file_name}: {str(e)}")
+
+        if uploaded_second_file is not None:
+            second_file_name = uploaded_second_file.name
+            with st.spinner(f"Processing second file: {second_file_name}..."):
+                try:
+                    # Create temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
+                        tmp_file.write(uploaded_second_file.getbuffer())
+                        temp_file_path = tmp_file.name
+
+                    try:
+                        # Parse with unified parser
+                        second_quotation = parse_quotation_file(temp_file_path)
+                        st.sidebar.success(f"✅ {second_file_name} loaded successfully")
+                    finally:
+                        # Clean up temporary file
+                        if os.path.exists(temp_file_path):
+                            os.unlink(temp_file_path)
+                except Exception as e:
+                    st.sidebar.error(f"❌ Error processing {second_file_name}: {str(e)}")
+
+        return first_quotation, second_quotation, first_file_name, second_file_name
+
     def create_analyzer(self, data, file_type: FileType = None, detected_type: str = None):
         """Create appropriate analyzer based on file type with caching"""
         # Create a unique key for this analyzer
@@ -420,10 +510,17 @@ class ProjectStructureAnalyzer:
 
     def create_comparator(self, data1, data2, file_type: FileType, name1: str, name2: str):
         """Create appropriate comparator based on file type with caching"""
-        # Create a unique key for this comparator
-        data1_hash = hash(str(data1.get("project", {}).get("id", "")) + str(len(data1.get("product_groups", []))))
-        data2_hash = hash(str(data2.get("project", {}).get("id", "")) + str(len(data2.get("product_groups", []))))
-        comparator_key = f"comparator_{file_type.value}_{data1_hash}_{data2_hash}"
+        # Create a stable key for this comparator
+        if file_type is None:  # Unified comparator
+            # For unified comparator, use the same key format as in the main logic
+            project1_id = data1.get("project", {}).get("id", "")
+            project2_id = data2.get("project", {}).get("id", "")
+            comparator_key = f"unified_comparator_{project1_id}_{project2_id}"
+        else:
+            # For other comparators, use a more stable key
+            project1_id = data1.get("project", {}).get("id", "")
+            project2_id = data2.get("project", {}).get("id", "")
+            comparator_key = f"comparator_{file_type.value}_{project1_id}_{project2_id}"
 
         # Check if we already have this comparator in session state
         if comparator_key in st.session_state:
@@ -434,6 +531,12 @@ class ProjectStructureAnalyzer:
             comparator = PreComparator(data1, data2, name1, name2)
         elif file_type == FileType.ANALISI_PROFITTABILITA:
             comparator = ProfittabilitaComparator(data1, data2, name1, name2)
+        elif file_type is None:  # Unified comparator
+            # Convert dict data back to IndustrialQuotation objects for unified comparator
+            from models.quotation_models import IndustrialQuotation
+            first_quotation = IndustrialQuotation.from_parser_dict(data1)
+            second_quotation = IndustrialQuotation.from_parser_dict(data2)
+            comparator = UnifiedComparator(first_quotation, second_quotation, name1, name2)
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
 
@@ -510,48 +613,71 @@ class ProjectStructureAnalyzer:
     def render_comparison_view(self, comparator, view_name: str):
         """Render the selected comparison view"""
         try:
-            if view_name == "Project Comparison":
-                comparator.display_project_comparison()
-            elif view_name == "Financial Comparison" or view_name == "Profitability Comparison":
-                if hasattr(comparator, "display_financial_comparison"):
-                    comparator.display_financial_comparison()
-                elif hasattr(comparator, "display_profitability_comparison"):
-                    comparator.display_profitability_comparison()
-            elif view_name == "Groups Comparison":
-                comparator.display_groups_comparison()
-            elif view_name == "Categories Comparison":
-                comparator.display_categories_comparison()
-            elif view_name == "Items Comparison":
-                comparator.display_items_comparison()
-            elif view_name == "WBE Comparison":
-                if hasattr(comparator, "display_wbe_comparison"):
-                    comparator.display_wbe_comparison()
+            # Check if this is a unified comparator
+            if hasattr(comparator, 'display_executive_summary') and hasattr(comparator, 'get_comparison_views'):
+                # Unified comparator views
+                if view_name == "Executive Summary":
+                    comparator.display_executive_summary()
+                elif view_name == "Data Consistency Check":
+                    comparator.display_data_consistency_check()
+                elif view_name == "WBE Impact Analysis":
+                    comparator.display_wbe_impact_analysis()
+                elif view_name == "Pricelist Comparison":
+                    comparator.display_pricelist_comparison()
+                elif view_name == "Project Structure Analysis":
+                    comparator.display_project_structure_analysis()
+                elif view_name == "Missing Items Analysis":
+                    comparator.display_missing_items_analysis()
+                elif view_name == "Financial Impact Assessment":
+                    comparator.display_financial_impact_assessment()
+                elif view_name == "Detailed Item Comparison":
+                    comparator.display_detailed_item_comparison()
                 else:
-                    st.warning("WBE Comparison is only available for Analisi Profittabilita files.")
-            elif view_name == "Cost Elements Comparison":
-                if hasattr(comparator, "display_cost_elements_comparison"):
-                    comparator.display_cost_elements_comparison()
-                else:
-                    st.warning("Cost Elements Comparison is only available for Analisi Profittabilita files.")
-            elif view_name == "UTM Comparison":
-                if hasattr(comparator, "display_utm_comparison"):
-                    comparator.display_utm_comparison()
-                else:
-                    st.warning("UTM Comparison is only available for Analisi Profittabilita files.")
-            elif view_name == "Engineering Comparison":
-                if hasattr(comparator, "display_engineering_comparison"):
-                    comparator.display_engineering_comparison()
-                else:
-                    st.warning("Engineering Comparison is only available for Analisi Profittabilita files.")
-            elif view_name == "Types Comparison":
-                if hasattr(comparator, "display_types_comparison"):
-                    comparator.display_types_comparison()
-                else:
-                    st.warning("Types Comparison is only available for Analisi Profittabilita files.")
-            elif view_name == "Summary Report":
-                comparator.display_summary_report()
+                    st.error(f"Unknown unified comparison view: {view_name}")
             else:
-                st.error(f"Unknown comparison view: {view_name}")
+                # Legacy comparator views
+                if view_name == "Project Comparison":
+                    comparator.display_project_comparison()
+                elif view_name == "Financial Comparison" or view_name == "Profitability Comparison":
+                    if hasattr(comparator, "display_financial_comparison"):
+                        comparator.display_financial_comparison()
+                    elif hasattr(comparator, "display_profitability_comparison"):
+                        comparator.display_profitability_comparison()
+                elif view_name == "Groups Comparison":
+                    comparator.display_groups_comparison()
+                elif view_name == "Categories Comparison":
+                    comparator.display_categories_comparison()
+                elif view_name == "Items Comparison":
+                    comparator.display_items_comparison()
+                elif view_name == "WBE Comparison":
+                    if hasattr(comparator, "display_wbe_comparison"):
+                        comparator.display_wbe_comparison()
+                    else:
+                        st.warning("WBE Comparison is only available for Analisi Profittabilita files.")
+                elif view_name == "Cost Elements Comparison":
+                    if hasattr(comparator, "display_cost_elements_comparison"):
+                        comparator.display_cost_elements_comparison()
+                    else:
+                        st.warning("Cost Elements Comparison is only available for Analisi Profittabilita files.")
+                elif view_name == "UTM Comparison":
+                    if hasattr(comparator, "display_utm_comparison"):
+                        comparator.display_utm_comparison()
+                    else:
+                        st.warning("UTM Comparison is only available for Analisi Profittabilita files.")
+                elif view_name == "Engineering Comparison":
+                    if hasattr(comparator, "display_engineering_comparison"):
+                        comparator.display_engineering_comparison()
+                    else:
+                        st.warning("Engineering Comparison is only available for Analisi Profittabilita files.")
+                elif view_name == "Types Comparison":
+                    if hasattr(comparator, "display_types_comparison"):
+                        comparator.display_types_comparison()
+                    else:
+                        st.warning("Types Comparison is only available for Analisi Profittabilita files.")
+                elif view_name == "Summary Report":
+                    comparator.display_summary_report()
+                else:
+                    st.error(f"Unknown comparison view: {view_name}")
 
         except Exception as e:
             render_error_message(
@@ -964,6 +1090,7 @@ class ProjectStructureAnalyzer:
         ### 🔄 File Comparison
         - **Compare Two PRE Files**: Side-by-side comparison of quotation parameters and financial differences  
         - **Compare Two Profittabilita Files**: Advanced comparison focusing on WBE, cost elements, UTM, and equipment types
+        - **Smart Comparison (Auto-Detect)**: Universal comparison for any two quotation files with automatic type detection
         
         ### 🔗 Cross-File Analysis
         - **Cross-Compare PRE vs Profittabilita**: Advanced cross-validation between quotation and profitability data with WBE impact analysis
@@ -1036,6 +1163,23 @@ class ProjectStructureAnalyzer:
                 st.sidebar.warning("⚠️ Upload both files to start cross-analysis")
             else:
                 st.sidebar.info("ℹ️ Upload PRE and Profittabilita files")
+
+        elif operation_mode == OperationMode.COMPARE_UNIFIED:
+            # Unified comparison status
+            file1_status = "✅ Loaded" if self.data1 is not None else "❌ Not loaded"
+            file2_status = "✅ Loaded" if self.data2 is not None else "❌ Not loaded"
+            comparison_status = "✅ Ready" if self.current_comparator is not None else "❌ Not ready"
+
+            st.sidebar.write(f"**First File:** {file1_status}")
+            st.sidebar.write(f"**Second File:** {file2_status}")
+            st.sidebar.write(f"**Smart Comparison:** {comparison_status}")
+
+            if self.data1 is not None and self.data2 is not None:
+                st.sidebar.success("🎉 Ready for smart comparison!")
+            elif self.data1 is not None or self.data2 is not None:
+                st.sidebar.warning("⚠️ Upload second file to start comparison")
+            else:
+                st.sidebar.info("ℹ️ Upload both files to begin smart comparison")
 
         else:
             # Dual file comparison status
@@ -1150,6 +1294,64 @@ class ProjectStructureAnalyzer:
                         )
                         st.session_state.cross_comparator_initialized = True
 
+                elif operation_mode == OperationMode.COMPARE_UNIFIED:
+                    # Check if we already have cached data
+                    cache_key = None
+                    if 'unified_first_quotation' in st.session_state and 'unified_second_quotation' in st.session_state:
+                        first_quotation = st.session_state.unified_first_quotation
+                        second_quotation = st.session_state.unified_second_quotation
+                        cache_key = f"unified_comparator_{first_quotation.project.id}_{second_quotation.project.id}"
+                        
+                        # If we have cached comparator, use it
+                        if cache_key in st.session_state:
+                            self.current_comparator = st.session_state[cache_key]
+                            self.data1 = first_quotation.to_parser_dict()
+                            self.data2 = second_quotation.to_parser_dict()
+                            self.file1_name = st.session_state.get('unified_first_file_name', 'File 1')
+                            self.file2_name = st.session_state.get('unified_second_file_name', 'File 2')
+                            st.sidebar.success("📋 Using cached analysis results")
+                            st.session_state.comparator_initialized = True
+                        else:
+                            # Process files again if comparator is missing
+                            first_quotation, second_quotation, first_file_name, second_file_name = self.render_unified_comparison_upload()
+                    else:
+                        # First time processing
+                        first_quotation, second_quotation, first_file_name, second_file_name = self.render_unified_comparison_upload()
+                    
+                    if first_quotation is not None and second_quotation is not None:
+                        # Store the original quotation objects for caching
+                        if 'unified_first_quotation' not in st.session_state:
+                            st.session_state.unified_first_quotation = first_quotation
+                        if 'unified_second_quotation' not in st.session_state:
+                            st.session_state.unified_second_quotation = second_quotation
+                        if 'unified_first_file_name' not in st.session_state:
+                            st.session_state.unified_first_file_name = first_file_name or "File 1"
+                        if 'unified_second_file_name' not in st.session_state:
+                            st.session_state.unified_second_file_name = second_file_name or "File 2"
+                        
+                        self.data1 = first_quotation.to_parser_dict()
+                        self.data2 = second_quotation.to_parser_dict()
+                        self.file1_name = first_file_name or "File 1"
+                        self.file2_name = second_file_name or "File 2"
+                        
+                        # Create a stable cache key based on project IDs only (more stable than file names)
+                        cache_key = f"unified_comparator_{first_quotation.project.id}_{second_quotation.project.id}"
+                        
+                        # Check if we already have a cached comparator
+                        if cache_key in st.session_state:
+                            self.current_comparator = st.session_state[cache_key]
+                            st.sidebar.success("📋 Using cached analysis results")
+                        else:
+                            # Create new comparator and cache it
+                            self.current_comparator = self.create_comparator(
+                                self.data1, self.data2, None, self.file1_name, self.file2_name
+                            )
+                            # Cache the unified comparator with a stable key
+                            st.session_state[cache_key] = self.current_comparator
+                            st.sidebar.info("🔄 Analysis completed and cached")
+                        
+                        st.session_state.comparator_initialized = True
+
             except Exception as e:
                 render_error_message(
                     "Error in file processing", f"Exception: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
@@ -1183,6 +1385,7 @@ class ProjectStructureAnalyzer:
             elif self.current_comparator is not None and operation_mode in [
                 OperationMode.COMPARE_PRE,
                 OperationMode.COMPARE_PROFITTABILITA,
+                OperationMode.COMPARE_UNIFIED,
             ]:
                 try:
                     st.sidebar.header("🔍 Comparison Views")
@@ -1270,7 +1473,7 @@ class ProjectStructureAnalyzer:
                 # Welcome screen for analysis
                 self.render_welcome_screen_with_operations()
 
-        elif operation_mode in [OperationMode.COMPARE_PRE, OperationMode.COMPARE_PROFITTABILITA]:
+        elif operation_mode in [OperationMode.COMPARE_PRE, OperationMode.COMPARE_PROFITTABILITA, OperationMode.COMPARE_UNIFIED]:
             # Comparison mode
             if (
                 self.current_comparator is not None

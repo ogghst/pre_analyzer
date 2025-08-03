@@ -7,6 +7,7 @@ from .unified_analyzer import UnifiedAnalyzer
 from .pre_comparator import PreComparator
 from .profittabilita_comparator import ProfittabilitaComparator
 from .pre_profittabilita_comparator import PreProfittabilitaComparator
+from .unified_comparator import UnifiedComparator
 
-__all__ = ['BaseAnalyzer', 'PreAnalyzer', 'ProfittabilitaAnalyzer', 'UnifiedAnalyzer', 'PreComparator', 'ProfittabilitaComparator', 'PreProfittabilitaComparator']
+__all__ = ['BaseAnalyzer', 'PreAnalyzer', 'ProfittabilitaAnalyzer', 'UnifiedAnalyzer', 'PreComparator', 'ProfittabilitaComparator', 'PreProfittabilitaComparator', 'UnifiedComparator']
 

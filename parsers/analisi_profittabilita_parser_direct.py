@@ -304,7 +304,7 @@ class DirectAnalisiProfittabilitaParser:
             try:
                 va21_sheet_name = self._find_latest_va21_sheet()
                 if not va21_sheet_name:
-                    logger.info("No VA21 sheet found")
+                    logger.debug("No VA21 sheet found")
                     return {}
             except Exception as e:
                 error_msg = f"Error finding VA21 sheet: {e}"
@@ -313,7 +313,7 @@ class DirectAnalisiProfittabilitaParser:
             
             try:
                 va21_ws = self.workbook[va21_sheet_name]
-                logger.info(f"Processing VA21 sheet: {va21_sheet_name}")
+                logger.debug(f"Processing VA21 sheet: {va21_sheet_name}")
                 
                 offers = {}
                 for row in range(VA21Rows.DATA_START_ROW, va21_ws.max_row + 1):
@@ -338,16 +338,23 @@ class DirectAnalisiProfittabilitaParser:
                                 if wbe_str.endswith(IdentificationPatterns.WBE_US_SUFFIX):
                                     wbe_str = self._convert_wbe_us_to_it(wbe_str)
                                 
+                                # Ensure offer_total is a valid number
+                                safe_offer_total = self._safe_decimal(offer_total, 0.0)
+                                safe_cost_subtotal = self._safe_decimal(cost_subtotal, 0.0)
+                                safe_listino_subtotal = self._safe_decimal(listino_subtotal, 0.0)
+                                safe_discount = self._safe_decimal(discount, 0.0)
+                                safe_margin_percentage = self._safe_decimal(margin_percentage, 0.0)
+                                
                                 offers[wbe_str] = {
                                     VA21Columns.WBE: wbe_str,
                                     VA21Columns.COD: cod,
                                     VA21Columns.DESCRIPTION: description,
                                     VA21Columns.QUANTITY: quantity,
-                                    VA21Columns.LISTINO_SUBTOTAL: listino_subtotal,
-                                    VA21Columns.DISCOUNT: discount,
-                                    VA21Columns.OFFER_TOTAL: offer_total,
-                                    VA21Columns.COST_SUBTOTAL: cost_subtotal,
-                                    VA21Columns.MARGIN_PERCENTAGE: margin_percentage
+                                    VA21Columns.LISTINO_SUBTOTAL: safe_listino_subtotal,
+                                    VA21Columns.DISCOUNT: safe_discount,
+                                    VA21Columns.OFFER_TOTAL: safe_offer_total,
+                                    VA21Columns.COST_SUBTOTAL: safe_cost_subtotal,
+                                    VA21Columns.MARGIN_PERCENTAGE: safe_margin_percentage
                                 }
                                 logger.debug(f"Extracted VA21 offer: {wbe_str}")
                                 
@@ -359,7 +366,7 @@ class DirectAnalisiProfittabilitaParser:
                         logger.warning(f"Error reading VA21 row {row}: {e}")
                         continue
                 
-                logger.info(f"Extracted {len(offers)} offer prices from VA21 sheet")
+                logger.debug(f"Extracted {len(offers)} offer prices from VA21 sheet")
                 return offers
                 
             except KeyError as e:
@@ -434,7 +441,7 @@ class DirectAnalisiProfittabilitaParser:
                                     categories=[]
                                 )
                                 current_category = None
-                                logger.info(f"Found group: {codice_val}")
+                                logger.debug(f"Found group: {codice_val}")
                             except Exception as e:
                                 logger.error(f"Error creating product group for row {row}: {e}")
                                 continue
@@ -446,27 +453,33 @@ class DirectAnalisiProfittabilitaParser:
                                 wbe_code = str(wbe_val) if wbe_val else ""
                                 offer_price = self.va21_offers.get(wbe_code, {}).get(VA21Columns.OFFER_TOTAL, 0.0)
                                 
+                                # Calculate cost value safely
+                                cost_value = float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO)))
+                                
+                                # Calculate margin safely, handling None offer_price
+                                margin_amount = (offer_price - cost_value) if offer_price is not None else 0.0
+                                
+                                # Calculate margin percentage safely
+                                margin_percentage = (
+                                    ((offer_price - cost_value) / cost_value * 100)
+                                    if offer_price is not None and cost_value != 0
+                                    else 0.0
+                                )
+                                
                                 current_category = QuotationCategory(
                                     category_id=str(cod_val),
                                     category_name=str(denominazione_val) if denominazione_val else "",
                                     wbe=wbe_code,
                                     items=[],
                                     pricelist_subtotal=float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUB_TOT_LISTINO))),
-                                    cost_subtotal=float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO))),
+                                    cost_subtotal=cost_value,
                                     total_cost=float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.COSTO_TOTALE))),
                                     offer_price=offer_price,
-                                    margin_amount = offer_price - float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO))),
-                                    # Handle division by zero for margin_percentage
-                                    margin_percentage = (
-                                        ((offer_price - float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO))))
-                                         / float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO))))
-                                        * 100
-                                        if float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO))) != 0
-                                        else 0.0
-                                    )
+                                    margin_amount=margin_amount,
+                                    margin_percentage=margin_percentage
                                 )
                                 current_group.categories.append(current_category)
-                                logger.info(f"Found category: {current_category.category_id} - \
+                                logger.debug(f"Found category: {current_category.category_id} - \
                                     list {safe_format_number(current_category.pricelist_subtotal,0)} - \
                                     cost {safe_format_number(current_category.cost_subtotal,0)} - \
                                     offer {safe_format_number(current_category.offer_price,0)} - \
@@ -599,7 +612,7 @@ class DirectAnalisiProfittabilitaParser:
                                 )
                                 
                                 va21_group.categories.append(item)
-                                logger.info(f"Added VA21 category: {item.category_id} - \
+                                logger.debug(f"Added VA21 category: {item.category_id} - \
                                     list {safe_format_number(item.pricelist_subtotal,0)} - \
                                     cost {safe_format_number(item.cost_subtotal,0)} - \
                                     offer {safe_format_number(item.offer_price,0)} - \
@@ -615,7 +628,7 @@ class DirectAnalisiProfittabilitaParser:
             except Exception as e:
                 logger.error(f"Error processing VA21 offers: {e}")
             
-            logger.info(f"Successfully extracted {len(product_groups)} product groups")
+            logger.debug(f"Successfully extracted {len(product_groups)} product groups")
             return product_groups
             
         except RuntimeError as e:
