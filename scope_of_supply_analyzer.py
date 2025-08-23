@@ -34,6 +34,7 @@ from components.ui_components import (
     render_welcome_screen,
 )
 from components.pdf_report_generator import render_pdf_export_button
+from models.quotation_manager import IndustrialQuotationManager
 from parsers.analisi_profittabilita_parser import parse_analisi_profittabilita_to_json
 
 # Import parsers
@@ -181,7 +182,7 @@ class ProjectStructureAnalyzer:
                 elif file_type is None:  # Unified parsing
                     # Use unified parser for auto-detection
                     quotation_model = parse_quotation_file(temp_file_path)
-                    data = quotation_model.to_parser_dict()
+                    data = IndustrialQuotationManager(quotation_model).to_parser_dict()
                     # Try to detect type from unified parser
                     from parsers.unified_parser import UnifiedQuotationParser
 
@@ -534,8 +535,8 @@ class ProjectStructureAnalyzer:
         elif file_type is None:  # Unified comparator
             # Convert dict data back to IndustrialQuotation objects for unified comparator
             from models.quotation_models import IndustrialQuotation
-            first_quotation = IndustrialQuotation.from_parser_dict(data1)
-            second_quotation = IndustrialQuotation.from_parser_dict(data2)
+            first_quotation = IndustrialQuotationManager.from_parser_dict(data1)
+            second_quotation = IndustrialQuotationManager.from_parser_dict(data2)
             comparator = UnifiedComparator(first_quotation, second_quotation, name1, name2)
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
@@ -1249,7 +1250,7 @@ class ProjectStructureAnalyzer:
                     if analyzer is not None:
                         self.current_analyzer = analyzer
                         self.current_data = (
-                            analyzer.quotation.to_parser_dict()
+                            IndustrialQuotationManager(analyzer.quotation).to_parser_dict()
                         )  # Convert to dict format for compatibility
                         self.current_file_type = None  # Unified mode
                         st.session_state.analyzer_initialized = True
@@ -1305,8 +1306,8 @@ class ProjectStructureAnalyzer:
                         # If we have cached comparator, use it
                         if cache_key in st.session_state:
                             self.current_comparator = st.session_state[cache_key]
-                            self.data1 = first_quotation.to_parser_dict()
-                            self.data2 = second_quotation.to_parser_dict()
+                            self.data1 = IndustrialQuotationManager(first_quotation).to_parser_dict()
+                            self.data2 = IndustrialQuotationManager(second_quotation).to_parser_dict()
                             self.file1_name = st.session_state.get('unified_first_file_name', 'File 1')
                             self.file2_name = st.session_state.get('unified_second_file_name', 'File 2')
                             st.sidebar.success("📋 Using cached analysis results")
@@ -1329,8 +1330,8 @@ class ProjectStructureAnalyzer:
                         if 'unified_second_file_name' not in st.session_state:
                             st.session_state.unified_second_file_name = second_file_name or "File 2"
                         
-                        self.data1 = first_quotation.to_parser_dict()
-                        self.data2 = second_quotation.to_parser_dict()
+                        self.data1 = IndustrialQuotationManager(first_quotation).to_parser_dict()
+                        self.data2 = IndustrialQuotationManager(second_quotation).to_parser_dict()
                         self.file1_name = first_file_name or "File 1"
                         self.file2_name = second_file_name or "File 2"
                         

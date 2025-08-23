@@ -21,8 +21,12 @@ from .quotation_models import (
 )
 
 from .field_mappings import FieldMapper
+from .quotation_manager import IndustrialQuotationManager
 
 __all__ = [
+    # Manager class
+    "IndustrialQuotationManager",
+
     # Main model classes
     "IndustrialQuotation",
     "ProjectInfo",
