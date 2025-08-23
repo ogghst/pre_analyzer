@@ -79,58 +79,13 @@ class UnifiedComparator:
         self.first_name = first_name
         self.second_name = second_name
         
-        # Analysis completion flag
-        self._analysis_completed = False
+        # Extract key components
+        self._extract_components()
         
-        # Initialize analysis results as None - will be computed on demand
-        self.item_comparisons = None
-        self.wbe_impacts = None
-        self.pricelist_analysis = None
-        self.first_items_map = None
-        self.second_items_map = None
-        self.wbe_map = None
-    
-    def is_analysis_completed(self) -> bool:
-        """Check if analysis has been completed"""
-        return self._analysis_completed
-    
-    def get_analysis_status(self) -> str:
-        """Get the current analysis status"""
-        if self._analysis_completed:
-            return "✅ Analysis completed (cached)"
-        else:
-            return "🔄 Analysis pending"
-    
-    def _ensure_analysis_completed(self):
-        """Ensure analysis has been completed, run it if needed"""
-        if not self._analysis_completed:
-            st.sidebar.info("🔄 Performing unified comparison analysis...")
-            # Extract key components
-            self._extract_components()
-            
-            # Perform analysis
-            self._analyze_data_consistency()
-            self._analyze_wbe_impact()
-            self._analyze_pricelist_changes()
-            
-            # Mark analysis as completed
-            self._analysis_completed = True
-            st.sidebar.success("✅ Analysis completed successfully")
-        else:
-            st.sidebar.info("📋 Using cached analysis results")
-    
-    def get_cached_analysis_results(self) -> Dict[str, Any]:
-        """Get cached analysis results to prevent re-computation"""
-        self._ensure_analysis_completed()
-        return {
-            'item_comparisons': self.item_comparisons,
-            'wbe_impacts': self.wbe_impacts,
-            'pricelist_analysis': self.pricelist_analysis,
-            'first_items_map': self.first_items_map,
-            'second_items_map': self.second_items_map,
-            'wbe_map': self.wbe_map,
-            'analysis_completed': self._analysis_completed
-        }
+        # Perform analysis
+        self._analyze_data_consistency()
+        self._analyze_wbe_impact()
+        self._analyze_pricelist_changes()
     
     def _extract_components(self):
         """Extract key components from both quotation objects for comparison"""
@@ -383,11 +338,7 @@ class UnifiedComparator:
     
     def display_executive_summary(self):
         """Display executive summary of the comparison"""
-        self._ensure_analysis_completed()
         st.header("📊 Unified Quotation Comparison - Executive Summary")
-        
-        # Show analysis status
-        st.info(self.get_analysis_status())
         
         # Key metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -473,7 +424,6 @@ class UnifiedComparator:
     
     def display_data_consistency_check(self):
         """Display detailed data consistency analysis"""
-        self._ensure_analysis_completed()
         st.header("🔍 Data Consistency Check")
         
         # Summary statistics
@@ -580,7 +530,6 @@ class UnifiedComparator:
     
     def display_wbe_impact_analysis(self):
         """Display WBE impact analysis"""
-        self._ensure_analysis_completed()
         st.header("🏗️ WBE Impact Analysis")
         
         st.markdown("""
@@ -704,7 +653,6 @@ class UnifiedComparator:
     
     def display_pricelist_comparison(self):
         """Display detailed pricelist comparison"""
-        self._ensure_analysis_completed()
         st.header("💰 Pricelist Comparison")
         
         # Overall comparison metrics
@@ -833,7 +781,6 @@ class UnifiedComparator:
     
     def display_missing_items_analysis(self):
         """Display analysis of missing items"""
-        self._ensure_analysis_completed()
         st.header("🔍 Missing Items Analysis")
         
         # Items missing in second
@@ -976,7 +923,6 @@ class UnifiedComparator:
     
     def display_detailed_item_comparison(self):
         """Display detailed item-by-item comparison"""
-        self._ensure_analysis_completed()
         st.header("🔍 Detailed Item Comparison")
         
         # Filter options
@@ -1098,7 +1044,6 @@ class UnifiedComparator:
     
     def display_project_structure_analysis(self):
         """Display project structure analysis"""
-        self._ensure_analysis_completed()
         st.header("🏗️ Project Structure Analysis")
         
         st.markdown("""
@@ -1277,7 +1222,6 @@ class UnifiedComparator:
     
     def display_financial_impact_assessment(self):
         """Display financial impact assessment"""
-        self._ensure_analysis_completed()
         st.header("💰 Financial Impact Assessment")
         
         st.markdown("""

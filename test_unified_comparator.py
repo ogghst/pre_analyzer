@@ -13,6 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__)))
 
 from models.quotation_models import IndustrialQuotation, ProjectInfo, ProjectParameters, SalesInfo, QuotationTotals, ProductGroup, QuotationCategory, QuotationItem
 from components.analyzers.unified_comparator import UnifiedComparator
+from models.quotation_manager import IndustrialQuotationManager
 
 def create_test_quotation(name: str, items_count: int = 5) -> IndustrialQuotation:
     """Create a test quotation for testing purposes"""
@@ -162,8 +163,8 @@ if __name__ == "__main__":
     # Save test results
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         json.dump({
-            'first_quotation': comparator.first_quotation.to_parser_dict(),
-            'second_quotation': comparator.second_quotation.to_parser_dict(),
+            'first_quotation': IndustrialQuotationManager(comparator.first_quotation).to_parser_dict(),
+            'second_quotation': IndustrialQuotationManager(comparator.second_quotation).to_parser_dict(),
             'analysis': comparator.pricelist_analysis
         }, f, indent=2)
         print(f"📄 Test results saved to: {f.name}") 
