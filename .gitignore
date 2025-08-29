@@ -19,3 +19,4 @@ htmlcov
 .coverage.yaml
 .coverage.yml
 .coverage.json
+logs/

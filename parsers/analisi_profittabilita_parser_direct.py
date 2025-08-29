@@ -456,12 +456,16 @@ class DirectAnalisiProfittabilitaParser:
                                 # Calculate cost value safely
                                 cost_value = float(self._safe_decimal(self._safe_cell_value(row, ExcelColumns.SUBTOT_COSTO)))
                                 
+                                # Convert offer_price to Decimal for consistent type handling
+                                offer_price_decimal = Decimal(str(offer_price)) if offer_price is not None else Decimal('0.0')
+                                cost_value_decimal = Decimal(str(cost_value))
+                                
                                 # Calculate margin safely, handling None offer_price
-                                margin_amount = (offer_price - cost_value) if offer_price is not None else 0.0
+                                margin_amount = float(offer_price_decimal - cost_value_decimal) if offer_price is not None else 0.0
                                 
                                 # Calculate margin percentage safely
                                 margin_percentage = (
-                                    ((offer_price - cost_value) / cost_value * 100)
+                                    float(((offer_price_decimal - cost_value_decimal) / cost_value_decimal * 100))
                                     if offer_price is not None and cost_value != 0
                                     else 0.0
                                 )

@@ -5,9 +5,11 @@ Provides unified interface for all project analysis and validation needs
 """
 
 import locale
+import logging
 import os
 import tempfile
 import traceback
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
@@ -622,6 +624,8 @@ class ProjectStructureAnalyzer:
                     comparator.display_data_consistency_check()
                 elif view_name == "WBE Impact Analysis":
                     comparator.display_wbe_impact_analysis()
+                elif view_name == "WBE Detail Analysis":
+                    comparator.display_wbe_detail()
                 elif view_name == "Pricelist Comparison":
                     comparator.display_pricelist_comparison()
                 elif view_name == "Project Structure Analysis":
@@ -654,6 +658,11 @@ class ProjectStructureAnalyzer:
                         comparator.display_wbe_comparison()
                     else:
                         st.warning("WBE Comparison is only available for Analisi Profittabilita files.")
+                elif view_name == "WBE Detail":
+                    if hasattr(comparator, "display_wbe_detail"):
+                        comparator.display_wbe_detail()
+                    else:
+                        st.warning("WBE Detail is only available for Analisi Profittabilita files.")
                 elif view_name == "Cost Elements Comparison":
                     if hasattr(comparator, "display_cost_elements_comparison"):
                         comparator.display_cost_elements_comparison()
@@ -1519,18 +1528,90 @@ class ProjectStructureAnalyzer:
         render_footer()
 
 
+def setup_logging():
+    """
+    Configure logging for the entire application with consistent format and handlers.
+    
+    This function sets up:
+    - Console logging with colored output
+    - File logging to logs directory
+    - Consistent log format across all modules
+    - Log level configuration
+    """
+    # Create logs directory if it doesn't exist
+    logs_dir = os.path.join(os.path.dirname(__file__), 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Generate log filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = os.path.join(logs_dir, f"pre_analyzer.log")
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # Clear any existing handlers to avoid duplicates
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Create formatters
+    console_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    
+    file_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(funcName)s:%(lineno)d - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # Console handler (INFO level and above)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(console_formatter)
+    
+    # File handler (DEBUG level and above for comprehensive logging)
+    file_handler = logging.FileHandler(log_filename, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(file_formatter)
+    
+    # Add handlers to root logger
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+    
+    # Set specific logger levels for different modules
+    logging.getLogger('parsers').setLevel(logging.INFO)
+    logging.getLogger('components').setLevel(logging.INFO)
+    logging.getLogger('models').setLevel(logging.INFO)
+    
+    # Log the setup completion
+    logger = logging.getLogger(__name__)
+    logger.info(f"Logging configured successfully. Log file: {log_filename}")
+    logger.info(f"Console logging level: INFO, File logging level: DEBUG")
+    
+    return logger
+
+
 def main():
     """Application entry point"""
     try:
-
+        # Setup logging first
+        logger = setup_logging()
+        logger.info("Starting Pre-Analyzer application")
+        
         try:
             locale.setlocale(locale.LC_ALL, "it_IT.UTF-8")
+            logger.info("Locale set to Italian (it_IT.UTF-8)")
         except locale.Error:
             locale.setlocale(locale.LC_ALL, "")
-
+            logger.warning("Could not set Italian locale, using system default")
+        
         app = ProjectStructureAnalyzer()
         app.run()
+        logger.info("Application completed successfully")
+        
     except Exception as e:
+        logger.error(f"Critical application error occurred: {str(e)}", exc_info=True)
         st.error("Critical application error occurred.")
         with st.expander("🔍 Error Details"):
             st.error(f"Exception: {str(e)}")

@@ -96,9 +96,14 @@ class ProjectParameters(BaseModel):
         - Converts to uppercase 
         - Handles None/empty values by defaulting to EUR
         - Maps common variants to standard currency codes
+        - Handles CurrencyType enum values directly
         """
         if v is None or v == "":
             return CurrencyType.EUR.value
+        
+        # If v is already a CurrencyType enum, return its value
+        if isinstance(v, CurrencyType):
+            return v.value
         
         # Convert to string and normalize
         currency_str = str(v).strip().upper()

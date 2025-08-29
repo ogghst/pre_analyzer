@@ -374,6 +374,7 @@ class UnifiedComparator:
             "Executive Summary",
             "Data Consistency Check",
             "WBE Impact Analysis", 
+            "WBE Detail Analysis",
             "Pricelist Comparison",
             "Project Structure Analysis",
             "Missing Items Analysis",
@@ -1459,6 +1460,323 @@ class UnifiedComparator:
                 st.warning(risk)
         else:
             st.success("✅ No significant financial risks identified.")
+    
+    def display_wbe_detail(self):
+        """Display detailed WBE comparison with item-level differences"""
+        self._ensure_analysis_completed()
+        st.header("🔍 WBE Detail Analysis")
+        
+        st.markdown("""
+        This analysis provides detailed comparison of specific Work Breakdown Elements (WBEs)
+        between the two quotation files, showing item-level differences and financial impact.
+        """)
+        
+        # Get all WBEs from both files, not just the second file
+        first_wbe_set = set()
+        second_wbe_set = set(self.wbe_map.keys())
+        
+        # Extract WBEs from first file by going through product groups
+        for group in self.first_product_groups:
+            for category in group.categories:
+                if category.wbe and category.wbe.strip():
+                    first_wbe_set.add(category.wbe.strip())
+        
+        # Combine all WBEs from both files
+        all_wbes = sorted(first_wbe_set.union(second_wbe_set))
+        
+        if not all_wbes:
+            st.warning("No WBE data found in either quotation file.")
+            return
+        
+        # WBE selector
+        st.subheader("📋 Select WBE for Detailed Analysis")
+        
+        # Add status indicators to WBE names
+        wbe_options = []
+        for wbe in all_wbes:
+            # Check if WBE exists in both files
+            wbe_in_first = wbe in first_wbe_set
+            wbe_in_second = wbe in second_wbe_set
+            
+            if wbe_in_first and wbe_in_second:
+                status = " (Common)"
+            elif wbe_in_first:
+                status = f" (Only in {self.first_name})"
+            elif wbe_in_second:
+                status = f" (Only in {self.second_name})"
+            else:
+                status = " (No items)"
+            
+            wbe_options.append(f"{wbe}{status}")
+        
+        selected_wbe_with_status = st.selectbox(
+            "Choose WBE to analyze:",
+            wbe_options,
+            key="wbe_detail_selector"
+        )
+        
+        # Extract WBE ID from selection
+        selected_wbe = selected_wbe_with_status.split(" (")[0]
+        
+        # Display WBE overview
+        st.subheader(f"📊 WBE Overview: {selected_wbe}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"**{self.first_name}**")
+            # Get items for this WBE from first quotation DIRECTLY from product groups
+            first_wbe_items = self._extract_wbe_items_unified(self.first_product_groups, selected_wbe)
+            
+            if first_wbe_items:
+                first_total_listino = sum(item['listino_price'] for item in first_wbe_items)
+                first_total_cost = sum(item['cost'] for item in first_wbe_items)
+                first_margin = first_total_listino - first_total_cost
+                first_margin_perc = (first_margin / first_total_listino * 100) if first_total_listino > 0 else 0
+                
+                st.metric("Items", len(first_wbe_items))
+                st.metric("Total Listino", safe_format_currency(first_total_listino))
+                st.metric("Total Cost", safe_format_currency(first_total_cost))
+                st.metric("Margin", safe_format_currency(first_margin))
+                st.metric("Margin %", safe_format_percentage(first_margin_perc))
+            else:
+                st.info("WBE not present in this file")
+        
+        with col2:
+            st.markdown(f"**{self.second_name}**")
+            if selected_wbe in self.wbe_map:
+                data2 = self.wbe_map[selected_wbe]
+                second_total_listino = data2['total_listino']
+                second_total_cost = data2['total_cost']
+                second_margin = second_total_listino - second_total_cost
+                second_margin_perc = (second_margin / second_total_listino * 100) if second_total_listino > 0 else 0
+                
+                st.metric("Items", data2['items_count'])
+                st.metric("Total Listino", safe_format_currency(second_total_listino))
+                st.metric("Total Cost", safe_format_currency(second_total_cost))
+                st.metric("Margin", safe_format_currency(second_margin))
+                st.metric("Margin %", safe_format_percentage(second_margin_perc))
+            else:
+                st.info("WBE not present in this file")
+        
+        # Show differences if WBE exists in both files
+        if first_wbe_items and selected_wbe in self.wbe_map:
+            st.subheader("📈 WBE Differences")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                listino_diff = first_total_listino - second_total_listino
+                st.metric("Listino Difference", safe_format_currency(listino_diff))
+            
+            with col2:
+                cost_diff = first_total_cost - second_total_cost
+                st.metric("Cost Difference", safe_format_currency(cost_diff))
+            
+            with col3:
+                margin_diff = first_margin - second_margin
+                st.metric("Margin Difference", safe_format_currency(margin_diff))
+        
+        # Item-level comparison
+        st.subheader("🔍 Item-Level Analysis")
+        
+        # Extract items for the selected WBE from both files
+        items1 = self._extract_wbe_items_unified(self.first_product_groups, selected_wbe)
+        items2 = self._extract_wbe_items_unified(self.second_product_groups, selected_wbe)
+        
+        if items1 or items2:
+            # Create comparison data
+            comparison_items = self._compare_wbe_items_unified(items1, items2)
+            
+            # Display item comparison table
+            if comparison_items:
+                st.subheader("📋 Item Differences")
+                
+                # Filter options
+                col1, col2 = st.columns(2)
+                with col1:
+                    show_matches = st.checkbox("Show matching items", value=False, key="wbe_show_matches")
+                with col2:
+                    show_only_differences = st.checkbox("Show only items with differences", value=True, key="wbe_show_differences")
+                
+                # Filter items based on options
+                filtered_items = []
+                for item in comparison_items:
+                    include_item = True
+                    
+                    if show_only_differences and item['Status'] == 'Match':
+                        include_item = False
+                    
+                    if not show_matches and item['Status'] == 'Match':
+                        include_item = False
+                    
+                    if include_item:
+                        filtered_items.append(item)
+                
+                if filtered_items:
+                    # Create dataframe for display
+                    df_items = pd.DataFrame(filtered_items)
+                    
+                    # Configure columns for better display
+                    st.dataframe(
+                        df_items,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Status": st.column_config.SelectboxColumn(
+                                "Status",
+                                width="small",
+                                options=["Match", f"Only in {self.first_name}", f"Only in {self.second_name}", "Value Difference"]
+                            ),
+                            f"{self.first_name} - Listino": st.column_config.NumberColumn(
+                                f"{self.first_name} - Listino",
+                                format="€%.2f"
+                            ),
+                            f"{self.second_name} - Listino": st.column_config.NumberColumn(
+                                f"{self.second_name} - Listino", 
+                                format="€%.2f"
+                            ),
+                            f"{self.first_name} - Cost": st.column_config.NumberColumn(
+                                f"{self.first_name} - Cost",
+                                format="€%.2f"
+                            ),
+                            f"{self.second_name} - Cost": st.column_config.NumberColumn(
+                                f"{self.second_name} - Cost",
+                                format="€%.2f"
+                            ),
+                            "Listino Diff": st.column_config.NumberColumn(
+                                "Listino Diff",
+                                format="€%.2f"
+                            ),
+                            "Cost Diff": st.column_config.NumberColumn(
+                                "Cost Diff",
+                                format="€%.2f"
+                            )
+                        }
+                    )
+                    
+                    # Summary statistics
+                    st.subheader("📊 Item Summary")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    total_items = len(comparison_items)
+                    matching_items = len([i for i in comparison_items if i['Status'] == 'Match'])
+                    only_in_first = len([i for i in comparison_items if i['Status'] == f'Only in {self.first_name}'])
+                    only_in_second = len([i for i in comparison_items if i['Status'] == f'Only in {self.second_name}'])
+                    value_differences = len([i for i in comparison_items if i['Status'] == 'Value Difference'])
+                    
+                    with col1:
+                        st.metric("Total Items", total_items)
+                    with col2:
+                        st.metric("Matching Items", matching_items)
+                    with col3:
+                        st.metric("Value Differences", value_differences)
+                    with col4:
+                        st.metric("Items to Add/Remove", only_in_first + only_in_second)
+                else:
+                    st.info("No items match the current filter criteria.")
+            else:
+                st.info("No items found for this WBE.")
+        else:
+            st.warning("No items found in this WBE in either file.")
+    
+    def _extract_wbe_items_unified(self, product_groups: List[Any], wbe_id: str) -> List[Dict]:
+        """Extract all items for a specific WBE from unified quotation structure"""
+        items = []
+        
+        for group in product_groups:
+            for category in group.categories:
+                category_wbe = category.wbe.strip() if category.wbe else ""
+                if category_wbe == wbe_id:
+                    for item in category.items:
+                        item_data = {
+                            'code': item.code.strip() if item.code else "",
+                            'description': item.description or "",
+                            'listino_price': self._safe_float(item.pricelist_total_price),
+                            'cost': self._safe_float(item.total_cost) if hasattr(item, 'total_cost') else 0,
+                            'quantity': self._safe_float(item.quantity),
+                            'unit_price': self._safe_float(item.pricelist_unit_price),
+                            'category': category.category_name or "",
+                            'group': group.group_name or "",
+                            'wbe': category_wbe
+                        }
+                        items.append(item_data)
+        
+        return items
+    
+    def _compare_wbe_items_unified(self, items1: List[Dict], items2: List[Dict]) -> List[Dict]:
+        """Compare items between two files for a specific WBE in unified structure"""
+        comparison_items = []
+        
+        # Create maps for quick lookup
+        items1_map = {item['code']: item for item in items1 if item['code']}
+        items2_map = {item['code']: item for item in items2 if item['code']}
+        
+        # Get all unique item codes
+        all_codes = set(items1_map.keys()).union(set(items2_map.keys()))
+        
+        for code in sorted(all_codes):
+            item1 = items1_map.get(code)
+            item2 = items2_map.get(code)
+            
+            if item1 and item2:
+                # Item exists in both files
+                listino_diff = item2['listino_price'] - item1['listino_price']
+                cost_diff = item2['cost'] - item1['cost']
+                
+                # Determine status based on differences
+                if abs(listino_diff) < 0.01 and abs(cost_diff) < 0.01:
+                    status = 'Match'
+                else:
+                    status = 'Value Difference'
+                
+                comparison_items.append({
+                    'Code': code,
+                    'Description': item1.get('description', item2.get('description', '')),
+                    'Status': status,
+                    f'{self.first_name} - Listino': item1['listino_price'],
+                    f'{self.second_name} - Listino': item2['listino_price'],
+                    f'{self.first_name} - Cost': item1['cost'],
+                    f'{self.second_name} - Cost': item2['cost'],
+                    'Listino Diff': listino_diff,
+                    'Cost Diff': cost_diff,
+                    'Category': item1.get('category', item2.get('category', '')),
+                    'Group': item1.get('group', item2.get('group', ''))
+                })
+            
+            elif item1:
+                # Item only in first file
+                comparison_items.append({
+                    'Code': code,
+                    'Description': item1['description'],
+                    'Status': f'Only in {self.first_name}',
+                    f'{self.first_name} - Listino': item1['listino_price'],
+                    f'{self.second_name} - Listino': 0,
+                    f'{self.first_name} - Cost': item1['cost'],
+                    f'{self.second_name} - Cost': 0,
+                    'Listino Diff': -item1['listino_price'],
+                    'Cost Diff': -item1['cost'],
+                    'Category': item1.get('category', ''),
+                    'Group': item1.get('group', '')
+                })
+            
+            elif item2:
+                # Item only in second file
+                comparison_items.append({
+                    'Code': code,
+                    'Description': item2['description'],
+                    'Status': f'Only in {self.second_name}',
+                    f'{self.first_name} - Listino': 0,
+                    f'{self.second_name} - Listino': item2['listino_price'],
+                    f'{self.first_name} - Cost': 0,
+                    f'{self.second_name} - Cost': item2['cost'],
+                    'Listino Diff': item2['listino_price'],
+                    'Cost Diff': item2['cost'],
+                    'Category': item2.get('category', ''),
+                    'Group': item2.get('group', '')
+                })
+        
+        return comparison_items
     
     def _safe_float(self, value: Any, default: float = 0.0) -> float:
         """Safely convert value to float"""

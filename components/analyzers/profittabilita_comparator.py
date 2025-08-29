@@ -40,6 +40,7 @@ class ProfittabilitaComparator:
         return [
             "Project Comparison",
             "WBE Comparison",
+            "WBE Detail",
             "Cost Elements Comparison",
             "Types Comparison",
             "Summary Report"
@@ -296,6 +297,298 @@ class ProfittabilitaComparator:
         
         df_comparison = pd.DataFrame(comparison_data)
         st.dataframe(df_comparison, use_container_width=True)
+    
+    def display_wbe_detail(self):
+        """Display detailed WBE comparison with item-level differences"""
+        st.header("🔍 WBE Detail Analysis")
+        
+        # Extract WBE data from both files
+        wbe_data1 = self._extract_wbe_data(self.product_groups1, self.name1)
+        wbe_data2 = self._extract_wbe_data(self.product_groups2, self.name2)
+        
+        # Find all WBEs (common and unique)
+        wbes1 = set(wbe_data1.keys())
+        wbes2 = set(wbe_data2.keys())
+        all_wbes = wbes1.union(wbes2)
+        
+        if not all_wbes:
+            st.warning("No WBE data found in either file.")
+            return
+        
+        # WBE selector
+        st.subheader("📋 Select WBE for Detailed Analysis")
+        
+        # Sort WBEs for better UX
+        sorted_wbes = sorted(all_wbes)
+        
+        # Add status indicators to WBE names
+        wbe_options = []
+        for wbe in sorted_wbes:
+            status = ""
+            if wbe in wbes1 and wbe in wbes2:
+                status = " (Common)"
+            elif wbe in wbes1:
+                status = f" (Only in {self.name1})"
+            else:
+                status = f" (Only in {self.name2})"
+            wbe_options.append(f"{wbe}{status}")
+        
+        selected_wbe_with_status = st.selectbox(
+            "Choose WBE to analyze:",
+            wbe_options,
+            key="wbe_detail_selector"
+        )
+        
+        # Extract WBE ID from selection
+        selected_wbe = selected_wbe_with_status.split(" (")[0]
+        
+        # Display WBE overview
+        st.subheader(f"📊 WBE Overview: {selected_wbe}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"**{self.name1}**")
+            if selected_wbe in wbe_data1:
+                data1 = wbe_data1[selected_wbe]
+                st.metric("Categories", data1.get('categories_count', 0))
+                st.metric("Items", data1.get('items_count', 0))
+                st.metric("Total Offer", safe_format_currency(data1.get(JsonFields.OFFER_PRICE, 0)))
+                st.metric("Total Cost", safe_format_currency(data1.get(JsonFields.TOTAL_COSTO, 0)))
+                st.metric("Margin", safe_format_currency(data1.get(JsonFields.OFFER_MARGIN, 0)))
+                st.metric("Margin %", safe_format_percentage(data1.get(JsonFields.OFFER_MARGIN_PERCENTAGE, 0)))
+            else:
+                st.info("WBE not present in this file")
+        
+        with col2:
+            st.markdown(f"**{self.name2}**")
+            if selected_wbe in wbe_data2:
+                data2 = wbe_data2[selected_wbe]
+                st.metric("Categories", data2.get('categories_count', 0))
+                st.metric("Items", data2.get('items_count', 0))
+                st.metric("Total Offer", safe_format_currency(data2.get(JsonFields.OFFER_PRICE, 0)))
+                st.metric("Total Cost", safe_format_currency(data2.get(JsonFields.TOTAL_COSTO, 0)))
+                st.metric("Margin", safe_format_currency(data2.get(JsonFields.OFFER_MARGIN, 0)))
+                st.metric("Margin %", safe_format_percentage(data2.get(JsonFields.OFFER_MARGIN_PERCENTAGE, 0)))
+            else:
+                st.info("WBE not present in this file")
+        
+        # Show differences if WBE exists in both files
+        if selected_wbe in wbe_data1 and selected_wbe in wbe_data2:
+            st.subheader("📈 WBE Differences")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                offer_diff = data2.get(JsonFields.OFFER_PRICE, 0) - data1.get(JsonFields.OFFER_PRICE, 0)
+                st.metric("Offer Difference", safe_format_currency(offer_diff))
+            
+            with col2:
+                cost_diff = data2.get(JsonFields.TOTAL_COSTO, 0) - data1.get(JsonFields.TOTAL_COSTO, 0)
+                st.metric("Cost Difference", safe_format_currency(cost_diff))
+            
+            with col3:
+                margin_diff = data2.get(JsonFields.OFFER_MARGIN, 0) - data1.get(JsonFields.OFFER_MARGIN, 0)
+                st.metric("Margin Difference", safe_format_currency(margin_diff))
+        
+        # Item-level comparison
+        st.subheader("🔍 Item-Level Analysis")
+        
+        # Extract items for the selected WBE from both files
+        items1 = self._extract_wbe_items(self.product_groups1, selected_wbe)
+        items2 = self._extract_wbe_items(self.product_groups2, selected_wbe)
+        
+        if items1 or items2:
+            # Create comparison data
+            comparison_items = self._compare_wbe_items(items1, items2)
+            
+            # Display item comparison table
+            if comparison_items:
+                st.subheader("📋 Item Differences")
+                
+                # Filter options
+                col1, col2 = st.columns(2)
+                with col1:
+                    show_matches = st.checkbox("Show matching items", value=False, key="wbe_show_matches")
+                with col2:
+                    show_only_differences = st.checkbox("Show only items with differences", value=True, key="wbe_show_differences")
+                
+                # Filter items based on options
+                filtered_items = []
+                for item in comparison_items:
+                    include_item = True
+                    
+                    if show_only_differences and item['Status'] == 'Match':
+                        include_item = False
+                    
+                    if not show_matches and item['Status'] == 'Match':
+                        include_item = False
+                    
+                    if include_item:
+                        filtered_items.append(item)
+                
+                if filtered_items:
+                    # Create dataframe for display
+                    df_items = pd.DataFrame(filtered_items)
+                    
+                    # Configure columns for better display
+                    st.dataframe(
+                        df_items,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Status": st.column_config.SelectboxColumn(
+                                "Status",
+                                width="small",
+                                options=["Match", "Only in File A", "Only in File B", "Value Difference"]
+                            ),
+                            f"{self.name1} - Offer": st.column_config.NumberColumn(
+                                f"{self.name1} - Offer",
+                                format="€%.2f"
+                            ),
+                            f"{self.name2} - Offer": st.column_config.NumberColumn(
+                                f"{self.name2} - Offer", 
+                                format="€%.2f"
+                            ),
+                            f"{self.name1} - Cost": st.column_config.NumberColumn(
+                                f"{self.name1} - Cost",
+                                format="€%.2f"
+                            ),
+                            f"{self.name2} - Cost": st.column_config.NumberColumn(
+                                f"{self.name2} - Cost",
+                                format="€%.2f"
+                            ),
+                            "Offer Diff": st.column_config.NumberColumn(
+                                "Offer Diff",
+                                format="€%.2f"
+                            ),
+                            "Cost Diff": st.column_config.NumberColumn(
+                                "Cost Diff",
+                                format="€%.2f"
+                            )
+                        }
+                    )
+                    
+                    # Summary statistics
+                    st.subheader("📊 Item Summary")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    total_items = len(comparison_items)
+                    matching_items = len([i for i in comparison_items if i['Status'] == 'Match'])
+                    only_in_file1 = len([i for i in comparison_items if i['Status'] == f'Only in {self.name1}'])
+                    only_in_file2 = len([i for i in comparison_items if i['Status'] == f'Only in {self.name2}'])
+                    value_differences = len([i for i in comparison_items if i['Status'] == 'Value Difference'])
+                    
+                    with col1:
+                        st.metric("Total Items", total_items)
+                    with col2:
+                        st.metric("Matching Items", matching_items)
+                    with col3:
+                        st.metric("Value Differences", value_differences)
+                    with col4:
+                        st.metric("Items to Add/Remove", only_in_file1 + only_in_file2)
+                else:
+                    st.info("No items match the current filter criteria.")
+            else:
+                st.info("No items found for this WBE.")
+        else:
+            st.warning("No items found in this WBE in either file.")
+    
+    def _extract_wbe_items(self, product_groups: List, wbe_id: str) -> List[Dict]:
+        """Extract all items for a specific WBE"""
+        items = []
+        
+        for group in product_groups:
+            for category in group.get(JsonFields.CATEGORIES, []):
+                category_wbe = category.get(JsonFields.WBE, '').strip()
+                if category_wbe == wbe_id:
+                    for item in category.get(JsonFields.ITEMS, []):
+                        item_data = {
+                            'code': item.get(JsonFields.CODE, ''),
+                            'description': item.get(JsonFields.DESCRIPTION, ''),
+                            'offer_price': safe_float(item.get(JsonFields.OFFER_PRICE, 0)),
+                            'cost': safe_float(item.get(JsonFields.TOTAL_COST, 0)),
+                            'category': category.get(JsonFields.CATEGORY_NAME, ''),
+                            'group': group.get(JsonFields.GROUP_NAME, ''),
+                            'wbe': category_wbe
+                        }
+                        items.append(item_data)
+        
+        return items
+    
+    def _compare_wbe_items(self, items1: List[Dict], items2: List[Dict]) -> List[Dict]:
+        """Compare items between two files for a specific WBE"""
+        comparison_items = []
+        
+        # Create maps for quick lookup
+        items1_map = {item['code']: item for item in items1}
+        items2_map = {item['code']: item for item in items2}
+        
+        # Get all unique item codes
+        all_codes = set(items1_map.keys()).union(set(items2_map.keys()))
+        
+        for code in sorted(all_codes):
+            item1 = items1_map.get(code)
+            item2 = items2_map.get(code)
+            
+            if item1 and item2:
+                # Item exists in both files
+                offer_diff = item2['offer_price'] - item1['offer_price']
+                cost_diff = item2['cost'] - item1['cost']
+                
+                # Determine status based on differences
+                if abs(offer_diff) < 0.01 and abs(cost_diff) < 0.01:
+                    status = 'Match'
+                else:
+                    status = 'Value Difference'
+                
+                comparison_items.append({
+                    'Code': code,
+                    'Description': item1.get('description', item2.get('description', '')),
+                    'Status': status,
+                    f'{self.name1} - Offer': item1['offer_price'],
+                    f'{self.name2} - Offer': item2['offer_price'],
+                    f'{self.name1} - Cost': item1['cost'],
+                    f'{self.name2} - Cost': item2['cost'],
+                    'Offer Diff': offer_diff,
+                    'Cost Diff': cost_diff,
+                    'Category': item1.get('category', item2.get('category', '')),
+                    'Group': item1.get('group', item2.get('group', ''))
+                })
+            
+            elif item1:
+                # Item only in file 1
+                comparison_items.append({
+                    'Code': code,
+                    'Description': item1['description'],
+                    'Status': f'Only in {self.name1}',
+                    f'{self.name1} - Offer': item1['offer_price'],
+                    f'{self.name2} - Offer': 0,
+                    f'{self.name1} - Cost': item1['cost'],
+                    f'{self.name2} - Cost': 0,
+                    'Offer Diff': -item1['offer_price'],
+                    'Cost Diff': -item1['cost'],
+                    'Category': item1.get('category', ''),
+                    'Group': item1.get('group', '')
+                })
+            
+            elif item2:
+                # Item only in file 2
+                comparison_items.append({
+                    'Code': code,
+                    'Description': item2['description'],
+                    'Status': f'Only in {self.name2}',
+                    f'{self.name1} - Offer': 0,
+                    f'{self.name2} - Offer': item2['offer_price'],
+                    f'{self.name1} - Cost': 0,
+                    f'{self.name2} - Cost': item2['cost'],
+                    'Offer Diff': item2['offer_price'],
+                    'Cost Diff': item2['cost'],
+                    'Category': item2.get('category', ''),
+                    'Group': item2.get('group', '')
+                })
+        
+        return comparison_items
      
     def display_cost_elements_comparison(self):
         """Display cost elements comparison (Material, UTM, Engineering, etc.)"""
