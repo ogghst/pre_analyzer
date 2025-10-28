@@ -14,6 +14,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from models import IndustrialQuotation, FieldMapper, ParserType
+from models.quotation_manager import IndustrialQuotationManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -414,13 +415,13 @@ class PreFileParser:
         converted_data = FieldMapper.convert_pre_parser_dict(raw_data)
         
         # Create and validate model instance
-        quotation = IndustrialQuotation.from_parser_dict(
+        quotation = IndustrialQuotationManager.from_parser_dict(
             converted_data, 
             source_file=self.file_path,
             parser_type=ParserType.PRE_FILE_PARSER
         )
         
-        logger.info(f"Successfully created IndustrialQuotation model with {quotation.get_summary_stats()['total_items']} items")
+        logger.info(f"Successfully created IndustrialQuotation model with {IndustrialQuotationManager(quotation).get_summary_stats()['total_items']} items")
         return quotation
     
     def _safe_float(self, value: Any, default: float = CalculationConstants.DEFAULT_FLOAT) -> float:
@@ -487,7 +488,7 @@ def parse_pre_to_model(file_path: str, output_path: Optional[str] = None) -> Ind
     quotation = parser.parse_to_model()
     
     if output_path:
-        quotation.save_json(output_path)
+        IndustrialQuotationManager(quotation).save_json(output_path)
     
     return quotation
 

@@ -22,6 +22,7 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from models import IndustrialQuotation, CurrencyType, CategoryType
+from models.quotation_manager import IndustrialQuotationManager
 from parsers.unified_parser import parse_quotation_file, analyze_quotation_file
 
 # Configure logging to file with detailed formatting
@@ -96,7 +97,7 @@ def demonstrate_unified_parsing():
             quotation = parse_quotation_file(file_path)
             
             # Show summary stats
-            stats = quotation.get_summary_stats()
+            stats = IndustrialQuotationManager(quotation).get_summary_stats()
             logger.info("Successfully parsed!")
             logger.info(f"   - Project ID: {stats['project_id']}")
             logger.info(f"   - Total groups: {stats['total_groups']}")
@@ -184,7 +185,7 @@ def demonstrate_model_validation():
     logger.info("Created sample quotation programmatically")
     
     # Validate consistency
-    validation_results = quotation.validate_totals_consistency()
+    validation_results = IndustrialQuotationManager(quotation).validate_totals_consistency()
     logger.info("Validation results:")
     for check, is_valid in validation_results.items():
         if is_valid:
@@ -220,16 +221,16 @@ def demonstrate_json_serialization():
         
         # Save to JSON
         json_output = "output/quotation_model_example.json"
-        quotation.save_json(json_output)
+        IndustrialQuotationManager(quotation).save_json(json_output)
         logger.info(f"Saved to JSON: {json_output}")
         
         # Load from JSON
-        loaded_quotation = IndustrialQuotation.load_json(json_output)
+        loaded_quotation = IndustrialQuotationManager.load_json(json_output)
         logger.info("Successfully loaded from JSON")
         
         # Verify they're equivalent
-        original_stats = quotation.get_summary_stats()
-        loaded_stats = loaded_quotation.get_summary_stats()
+        original_stats = IndustrialQuotationManager(quotation).get_summary_stats()
+        loaded_stats = IndustrialQuotationManager(loaded_quotation).get_summary_stats()
         
         logger.info("Comparing original vs loaded:")
         items_match = original_stats['total_items'] == loaded_stats['total_items']
@@ -264,9 +265,10 @@ def demonstrate_pandas_conversion():
         logger.info("Parsed quotation for pandas demo")
         
         # Convert to different DataFrames
-        items_df = quotation.to_items_dataframe()
-        categories_df = quotation.to_categories_dataframe()
-        groups_df = quotation.to_groups_dataframe()
+        manager = IndustrialQuotationManager(quotation)
+        items_df = manager.to_items_dataframe()
+        categories_df = manager.to_categories_dataframe()
+        groups_df = manager.to_groups_dataframe()
         
         logger.info("Created DataFrames:")
         logger.info(f"   - Items DataFrame: {items_df.shape[0]} rows × {items_df.shape[1]} columns")
